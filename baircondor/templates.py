@@ -27,12 +27,12 @@ def write_run_sh(run_dir: Path, repo_dir: Path, jobname: str, resources: dict, c
 def _render_job_sub(
     run_dir: Path, repo_dir: Path, resources: dict, jobname: str, omit_gpus_when_zero: bool
 ) -> str:
-    run_sh = run_dir / "run.sh"
+    run_dir / "run.sh"
     lines = [
         "universe = vanilla",
         f"initialdir = {repo_dir}",
         "executable = /bin/bash",
-        f'arguments = "{run_sh}" -- $(args)',
+        "arguments = __ARGS_PLACEHOLDER__",
         "getenv = True",
         f"output = {run_dir}/stdout.txt",
         f"error  = {run_dir}/stderr.txt",

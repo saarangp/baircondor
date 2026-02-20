@@ -117,16 +117,25 @@ def _validate_conda(conda: dict) -> None:
         sys.exit("error: --conda-env requires --conda-base or conda.conda_base in config")
 
 
-def _patch_args(job_sub: Path, run_sh: Path, command: list[str]) -> None:
-    """Replace the $(args) placeholder in job.sub with the real argument string."""
-    import shlex
+def _condor_escape_arg(arg: str) -> str:
+    """Escape one argument for HTCondor new-syntax arguments line.
 
-    arg_str = shlex.join(["--"] + command)
+    Rules: double-quotes are doubled (""), arguments containing spaces/tabs/single-quotes
+    are wrapped in single quotes with interior single-quotes doubled ('').
+    """
+    result = arg.replace('"', '""')
+    if " " in result or "\t" in result or "'" in result:
+        result = "'" + result.replace("'", "''") + "'"
+    return result
+
+
+def _patch_args(job_sub: Path, run_sh: Path, command: list[str]) -> None:
+    """Replace the __ARGS_PLACEHOLDER__ in job.sub with a properly quoted argument string."""
+    parts = [str(run_sh), "--"] + command
+    inner = " ".join(_condor_escape_arg(p) for p in parts)
+    arg_line = f'arguments = "{inner}"'
     text = job_sub.read_text()
-    text = text.replace(
-        f'arguments = "{run_sh}" -- $(args)',
-        f'arguments = "{run_sh}" {arg_str}',
-    )
+    text = text.replace("arguments = __ARGS_PLACEHOLDER__", arg_line)
     job_sub.write_text(text)
 
 
