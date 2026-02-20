@@ -15,13 +15,13 @@ The script checks CUDA availability, collects device info, runs a 4096x4096 matm
 python examples/gpu_test.py
 
 # Via baircondor
-baircondor submit --scratch /tmp --gpus 1 -- python examples/gpu_test.py
+baircondor submit --gpus 1 -- python examples/gpu_test.py
 
 # With a conda env
-baircondor submit --scratch /tmp --gpus 1 --conda-env myenv -- python examples/gpu_test.py
+baircondor submit --gpus 1 --conda-env myenv -- python examples/gpu_test.py
 
 # Dry run (no GPU needed, just checks command wiring)
-baircondor submit --scratch /tmp --gpus 1 --dry-run -- python examples/gpu_test.py
+baircondor submit --gpus 1 --dry-run -- python examples/gpu_test.py
 ```
 
 ### Output

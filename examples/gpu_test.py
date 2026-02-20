@@ -8,10 +8,10 @@ Usage:
     python examples/gpu_test.py
 
     # Via baircondor (real submission)
-    baircondor submit --scratch /tmp --gpus 1 -- python examples/gpu_test.py
+    baircondor submit --gpus 1 -- python examples/gpu_test.py
 
     # With conda env
-    baircondor submit --scratch /tmp --gpus 1 --conda-env myenv -- python examples/gpu_test.py
+    baircondor submit --gpus 1 --conda-env myenv -- python examples/gpu_test.py
 """
 
 import json

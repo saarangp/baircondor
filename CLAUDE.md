@@ -66,5 +66,5 @@ pytest tests/              # run all tests
 pytest tests/test_jobsub.py -v  # run specific test file
 
 # smoke test (dry run, no condor needed)
-baircondor submit --scratch /tmp --gpus 0 --dry-run -- echo hello
+baircondor submit --gpus 0 --dry-run -- echo hello
 ```

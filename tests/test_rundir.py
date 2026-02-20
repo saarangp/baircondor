@@ -1,7 +1,5 @@
 """Tests for run directory naming and creation."""
 
-import pytest
-
 from baircondor.submit import _make_run_dir
 
 
@@ -30,9 +28,12 @@ def test_run_dir_with_project(tmp_path):
     assert parts.index("myproject") < parts.index("myjob")
 
 
-def test_run_dir_scratch_missing():
-    with pytest.raises(SystemExit):
-        _make_run_dir("/nonexistent/path", "condor-runs", "myjob", None, None)
+def test_run_dir_scratch_auto_created(tmp_path):
+    new_scratch = tmp_path / "brand-new-scratch"
+    assert not new_scratch.exists()
+    run_dir = _make_run_dir(str(new_scratch), "condor-runs", "myjob", None, None)
+    assert new_scratch.exists()
+    assert run_dir.is_relative_to(new_scratch)
 
 
 def test_run_dir_is_unique(tmp_path):

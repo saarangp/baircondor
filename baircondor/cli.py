@@ -32,9 +32,9 @@ def main() -> None:
 def _common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--scratch",
-        required=True,
+        default=None,
         metavar="PATH",
-        help="Fast local scratch directory (e.g. /raid/$USER).",
+        help="Scratch directory for run dirs (default: ~/condor-scratch).",
     )
     p.add_argument(
         "--jobname", metavar="NAME", help="Job name (default: repo dir name or 'interactive')."

@@ -29,9 +29,11 @@ def run_submit(args) -> None:
 
     repo_dir = Path.cwd()
     jobname = args.jobname or repo_dir.name
+    scratch = args.scratch or cfg["defaults"]["scratch"]
+    scratch = str(Path(scratch).expanduser())
     runs_subdir = getattr(args, "runs_subdir", None) or cfg["defaults"]["runs_subdir"]
     run_dir = _make_run_dir(
-        args.scratch,
+        scratch,
         runs_subdir,
         jobname,
         getattr(args, "project", None),
@@ -62,9 +64,11 @@ def run_interactive(args) -> None:
 
     repo_dir = Path.cwd()
     jobname = args.jobname or "interactive"
+    scratch = args.scratch or cfg["defaults"]["scratch"]
+    scratch = str(Path(scratch).expanduser())
     runs_subdir = getattr(args, "runs_subdir", None) or cfg["defaults"]["runs_subdir"]
     run_dir = _make_run_dir(
-        args.scratch,
+        scratch,
         runs_subdir,
         jobname,
         getattr(args, "project", None),
@@ -95,8 +99,7 @@ def _make_run_dir(
     scratch: str, runs_subdir: str, jobname: str, project: str | None, tag: str | None
 ) -> Path:
     scratch_path = Path(scratch)
-    if not scratch_path.exists():
-        sys.exit(f"error: --scratch path does not exist: {scratch}")
+    scratch_path.mkdir(parents=True, exist_ok=True)
     if not os.access(scratch_path, os.W_OK):
         sys.exit(f"error: --scratch path is not writable: {scratch}")
 

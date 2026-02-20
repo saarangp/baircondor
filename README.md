@@ -15,30 +15,30 @@ pip install -e .           # without
 
 **Batch job (GPU):**
 ```bash
-baircondor submit --scratch /raid/$USER --gpus 2 -- python pretraining.py --config config.py
+baircondor submit --gpus 2 -- python pretraining.py --config config.py
 ```
 
 **Batch job (CPU-only):**
 ```bash
-baircondor submit --scratch /raid/$USER --gpus 0 -- python eval.py --checkpoint ckpt.pt
+baircondor submit --gpus 0 -- python eval.py --checkpoint ckpt.pt
 ```
 
 **Interactive shell (with GPU):**
 ```bash
-baircondor interactive --scratch /raid/$USER --gpus 1 --mem 32G
+baircondor interactive --gpus 1 --mem 32G
 ```
 
 **Dry run (generate files, don't submit):**
 ```bash
-baircondor submit --scratch /tmp --gpus 0 --dry-run -- echo hello
+baircondor submit --gpus 0 --dry-run -- echo hello
 ```
 
 ## What it does
 
-For every submission, baircondor creates a timestamped run directory under `--scratch`:
+For every submission, baircondor creates a timestamped run directory under your scratch path (`~/condor-scratch` by default, auto-created if missing):
 
 ```
-/raid/$USER/condor-runs/$USER/<jobname>/20260219_161635_abc123/
+~/condor-scratch/condor-runs/$USER/<jobname>/20260219_161635_abc123/
   job.sub       condor submit description
   run.sh        wrapper script executed by condor
   meta.json     git commit, resources, timestamp
@@ -55,9 +55,9 @@ All options work for both `submit` and `interactive`:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--scratch PATH` | *(required)* | Fast local storage, e.g. `/raid/$USER` |
+| `--scratch PATH` | `~/condor-scratch` | Scratch directory for run dirs |
 | `--gpus N` | `1` | GPUs to request; `0` = CPU-only |
-| `--cpus N` | `gpus × 6` or `4` | CPUs to request |
+| `--cpus N` | `gpus × 4` or `4` | CPUs to request |
 | `--mem MEM` | `24G` or `8G` | Memory, passed verbatim (e.g. `48G`, `12000MB`) |
 | `--disk DISK` | *(omitted)* | Disk request, passed verbatim |
 | `--jobname NAME` | repo dir name | Label for the job and run dir |
@@ -74,9 +74,10 @@ Create `~/.config/baircondor/config.yaml` to set lab-wide or personal defaults:
 
 ```yaml
 defaults:
+  scratch: /raid/myuser  # override: use fast local storage instead of ~/condor-scratch
   runs_subdir: condor-runs
-  cpus_per_gpu: 8       # override: 8 CPUs per GPU instead of 6
-  mem_gpu: "48G"        # override: 48G default for GPU jobs
+  cpus_per_gpu: 8        # override: 8 CPUs per GPU instead of default 4
+  mem_gpu: "48G"         # override: 48G default for GPU jobs
 
 conda:
   conda_base: /raid/saarang/miniconda3
@@ -108,3 +109,21 @@ Pre-commit hooks (autoflake → isort → black) run automatically on commit aft
 pip install pre-commit
 pre-commit install
 ```
+
+## Status
+
+**What works today:**
+- `submit` and `interactive` subcommands with full run-dir generation (`job.sub`, `run.sh`, `meta.json`)
+- Config cascade (built-in defaults → `~/.config/baircondor/config.yaml` → CLI flags)
+- `--dry-run` mode (no condor needed)
+- Conda env activation
+- Git metadata capture in `meta.json`
+
+**What needs testing on real clusters:**
+- End-to-end `condor_submit` on each lab server (GPU jobs, CPU-only jobs, interactive sessions)
+- Conda activation inside interactive and batch jobs
+- Stress testing: concurrent submissions, large scratch dirs, edge-case job names
+- Verifying `stdout.txt`/`stderr.txt`/`condor.log` output paths under each server's schedd
+
+**Not yet implemented:**
+- Docker universe support (container jobs, local registry, bind mounts)

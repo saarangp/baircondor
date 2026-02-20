@@ -9,6 +9,7 @@ import yaml
 
 DEFAULTS: dict[str, Any] = {
     "defaults": {
+        "scratch": "~/condor-scratch",
         "runs_subdir": "condor-runs",
         "cpus_per_gpu": 4,  # effectively like num workers per GPU, but also used to compute CPU-only defaults
         "cpus_cpu_only": 4,
