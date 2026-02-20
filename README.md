@@ -51,7 +51,7 @@ For every submission, baircondor creates a timestamped run directory under your 
 ```
 
 `initialdir` in `job.sub` is set to your current working directory (the repo), so relative paths in your scripts behave exactly like they do interactively.
-`requirements` in `job.sub` is set to the submit host (`toLower(Machine) == "<submit-host>"`), so jobs run on the same server where you submitted.
+By default, `requirements` in `job.sub` is set to the submit host (`toLower(Machine) == "<submit-host>"`), so jobs run on the same server where you submitted. Use `--no-pin-submit-host` to disable host pinning.
 
 ## CLI reference
 
@@ -69,6 +69,8 @@ All options work for both `submit` and `interactive`:
 | `--tag TAG` | *(omitted)* | Appended to run dir name |
 | `--conda-env ENV` | *(omitted)* | Conda env to activate before running |
 | `--conda-base PATH` | from config or auto-detect | Path to conda installation |
+| `--pin-submit-host` | from config (`true`) | Pin job to submit host |
+| `--no-pin-submit-host` | *(off)* | Disable host pinning |
 | `--dry-run` | `false` | Generate files only; don't call condor |
 | `--config PATH` | `~/.config/baircondor/config.yaml` | Config file override |
 
@@ -88,6 +90,7 @@ conda:
 
 condor:
   omit_request_gpus_when_zero: true
+  pin_submit_host: true
 ```
 
 CLI flags always override the config file.

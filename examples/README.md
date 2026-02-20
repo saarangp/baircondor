@@ -17,6 +17,9 @@ python examples/gpu_test.py
 # Via baircondor
 baircondor submit --gpus 1 -- python examples/gpu_test.py
 
+# Disable submit-host pinning (allow scheduling on any eligible host)
+baircondor submit --no-pin-submit-host --gpus 1 -- python examples/gpu_test.py
+
 # With a conda env
 baircondor submit --gpus 1 --conda-env myenv -- python examples/gpu_test.py
 # (Uses --conda-base from config, or auto-detects from your shell conda setup)

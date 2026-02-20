@@ -3,7 +3,7 @@
 import subprocess
 from types import SimpleNamespace
 
-from baircondor.config import resolve_conda
+from baircondor.config import resolve_conda, resolve_pin_submit_host
 
 
 def _args(conda_env=None, conda_base=None):
@@ -56,3 +56,16 @@ def test_conda_base_autodetect_absent(monkeypatch):
     monkeypatch.delenv("CONDA_EXE", raising=False)
     out = resolve_conda(cfg, _args(conda_env="myenv"))
     assert out["conda_base"] is None
+
+
+def test_pin_submit_host_from_config_default():
+    cfg = {"condor": {"pin_submit_host": True}}
+    assert resolve_pin_submit_host(cfg, _args()) is True
+
+
+def test_pin_submit_host_cli_override():
+    cfg = {"condor": {"pin_submit_host": True}}
+    assert resolve_pin_submit_host(cfg, _args()) is True
+    args = _args()
+    args.pin_submit_host = False
+    assert resolve_pin_submit_host(cfg, args) is False
