@@ -1,6 +1,8 @@
 # baircondor
 
-A small CLI wrapper around `condor_submit` that standardizes HTCondor job submission across BAIR lab GPU servers.
+Kinda like submitit but for condor (and also way simpler)
+
+A small CLI wrapper around `condor_submit` that standardizes HTCondor job submission across UCLA BAIR lab GPU servers.
 
 Each server runs its own HTCondor schedd. SSH into the server you want and submit there.
 baircondor pins the job to that exact submit host so run-dir paths stay local and predictable.
