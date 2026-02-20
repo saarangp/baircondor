@@ -67,6 +67,20 @@ def _common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--conda-env", metavar="ENVNAME", help="Conda environment to activate.")
     p.add_argument("--conda-base", metavar="PATH", help="Conda installation base path.")
     p.add_argument(
+        "--pin-submit-host",
+        dest="pin_submit_host",
+        action="store_true",
+        default=None,
+        help="Pin job to the submit host.",
+    )
+    p.add_argument(
+        "--no-pin-submit-host",
+        dest="pin_submit_host",
+        action="store_false",
+        default=None,
+        help="Allow scheduling on any eligible host.",
+    )
+    p.add_argument(
         "--dry-run", action="store_true", help="Generate files but do not call condor_submit."
     )
 
