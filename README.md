@@ -125,9 +125,7 @@ pre-commit install
 
 **What needs testing on real clusters:**
 - End-to-end `condor_submit` on each lab server (GPU jobs, CPU-only jobs, interactive sessions)
-- Conda activation inside interactive and batch jobs
 - Stress testing: concurrent submissions, large scratch dirs, edge-case job names
-- Verifying `stdout.txt`/`stderr.txt`/`condor.log` output paths under each server's schedd
 
 **Not yet implemented:**
 - Docker universe support (container jobs, local registry, bind mounts)
