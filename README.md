@@ -36,6 +36,27 @@ baircondor interactive --gpus 1 --mem 32G
 baircondor submit --gpus 0 --dry-run -- echo hello
 ```
 
+## Python API
+
+You can also submit jobs programmatically — useful for embedding condor config in your own pydantic training configs:
+
+```python
+from baircondor import CondorConfig, submit
+
+# Using a CondorConfig model (embed in your own pydantic configs)
+cfg = CondorConfig(gpus=2, mem="32G", conda_env="train")
+submit(["python", "train.py", "--lr", "1e-4"], condor=cfg)
+
+# Or with plain kwargs
+submit(["python", "train.py"], gpus=1, dry_run=True)
+
+# Interactive session
+from baircondor import interactive
+interactive(condor=CondorConfig(gpus=1, mem="32G"))
+```
+
+`CondorConfig` fields mirror the CLI flags (same names, same defaults). Kwargs override the model, matching the "CLI flags always win" convention.
+
 ## What it does
 
 For every submission, baircondor creates a timestamped run directory under your scratch path (`~/condor-scratch` by default, auto-created if missing):
@@ -118,6 +139,7 @@ pre-commit install
 
 **What works today:**
 - `submit` and `interactive` subcommands with full run-dir generation (`job.sub`, `run.sh`, `meta.json`)
+- Python API: `CondorConfig` pydantic model + `submit()` / `interactive()` functions
 - Config cascade (built-in defaults → `~/.config/baircondor/config.yaml` → CLI flags)
 - `--dry-run` mode (no condor needed)
 - Conda env activation

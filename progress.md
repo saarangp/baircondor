@@ -33,4 +33,4 @@ _(nothing active)_
 - [x] `~/.config/baircondor/config.yaml` example file / template (`examples/config.yaml`)
 - [ ] Shell completion (argcomplete or manual)
 - [ ] Docker support
-- [ ] Python API / pydantic integration: expose a `submit()` function and a `CondorConfig` pydantic model so jobs can be queued programmatically from Python configs (e.g. embed `condor: CondorConfig` in a project's pydantic training config and call `baircondor.submit(command=[...], condor=cfg.condor)`). Key refactor: decouple `resolve_resources` from argparse `Namespace` so it accepts plain kwargs.
+- [x] Python API / pydantic integration: expose a `submit()` function and a `CondorConfig` pydantic model so jobs can be queued programmatically from Python configs (e.g. embed `condor: CondorConfig` in a project's pydantic training config and call `baircondor.submit(command=[...], condor=cfg.condor)`). Implemented via `SimpleNamespace` shim in `baircondor/api.py` — zero internal refactoring needed.
