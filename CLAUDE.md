@@ -68,3 +68,9 @@ pytest tests/test_jobsub.py -v  # run specific test file
 # smoke test (dry run, no condor needed)
 baircondor submit --gpus 0 --dry-run -- echo hello
 ```
+
+## General Instructions
+- Please use the AskUserQuestion liberally to understand intent and plan carefully
+- avoid "slop code" (unnecessary functions, functions inside functions, unnecessary checks)
+- respect the pre-commit hokos
+- run tests if they exist after changes, write new ones and then run before making any changes if they dont! 
