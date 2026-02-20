@@ -7,10 +7,17 @@ from pathlib import Path
 
 
 def write_job_sub(
-    run_dir: Path, repo_dir: Path, resources: dict, jobname: str, omit_gpus_when_zero: bool = True
+    run_dir: Path,
+    repo_dir: Path,
+    resources: dict,
+    jobname: str,
+    submit_host: str,
+    omit_gpus_when_zero: bool = True,
 ) -> Path:
     path = run_dir / "job.sub"
-    path.write_text(_render_job_sub(run_dir, repo_dir, resources, jobname, omit_gpus_when_zero))
+    path.write_text(
+        _render_job_sub(run_dir, repo_dir, resources, jobname, submit_host, omit_gpus_when_zero)
+    )
     return path
 
 
@@ -25,7 +32,12 @@ def write_run_sh(run_dir: Path, repo_dir: Path, jobname: str, resources: dict, c
 
 
 def _render_job_sub(
-    run_dir: Path, repo_dir: Path, resources: dict, jobname: str, omit_gpus_when_zero: bool
+    run_dir: Path,
+    repo_dir: Path,
+    resources: dict,
+    jobname: str,
+    submit_host: str,
+    omit_gpus_when_zero: bool,
 ) -> str:
     run_dir / "run.sh"
     lines = [
@@ -39,6 +51,7 @@ def _render_job_sub(
         f"log    = {run_dir}/condor.log",
         f"request_cpus = {resources['cpus']}",
         f"request_memory = {resources['mem']}",
+        f'requirements = (toLower(Machine) == "{submit_host.lower()}")',
     ]
 
     gpus = resources["gpus"]

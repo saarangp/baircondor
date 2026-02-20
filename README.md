@@ -2,7 +2,8 @@
 
 A small CLI wrapper around `condor_submit` that standardizes HTCondor job submission across BAIR lab GPU servers.
 
-Each server runs its own HTCondor schedd. SSH into the server you want and submit there — baircondor handles the rest.
+Each server runs its own HTCondor schedd. SSH into the server you want and submit there.
+baircondor pins the job to that exact submit host so run-dir paths stay local and predictable.
 
 ## Installation
 
@@ -48,6 +49,7 @@ For every submission, baircondor creates a timestamped run directory under your 
 ```
 
 `initialdir` in `job.sub` is set to your current working directory (the repo), so relative paths in your scripts behave exactly like they do interactively.
+`requirements` in `job.sub` is set to the submit host (`toLower(Machine) == "<submit-host>"`), so jobs run on the same server where you submitted.
 
 ## CLI reference
 

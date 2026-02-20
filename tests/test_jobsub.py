@@ -19,7 +19,7 @@ def repo_dir(tmp_path):
 
 
 def _sub_text(run_dir, repo_dir, resources, jobname="myjob", omit_zero=True):
-    write_job_sub(run_dir, repo_dir, resources, jobname, omit_zero)
+    write_job_sub(run_dir, repo_dir, resources, jobname, "submit-host.example.com", omit_zero)
     return (run_dir / "job.sub").read_text()
 
 
@@ -35,6 +35,7 @@ def test_required_fields_present(run_dir, repo_dir):
     assert f"log    = {run_dir}/condor.log" in text
     assert "request_cpus = 6" in text
     assert "request_memory = 24G" in text
+    assert 'requirements = (toLower(Machine) == "submit-host.example.com")' in text
     assert "request_gpus = 1" in text
 
 

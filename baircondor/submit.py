@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import socket
 import string
 import subprocess
 import sys
@@ -28,6 +29,7 @@ def run_submit(args) -> None:
         sys.exit("error: a command is required after --")
 
     repo_dir = Path.cwd()
+    submit_host = socket.getfqdn().lower()
     jobname = args.jobname or repo_dir.name
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -46,7 +48,12 @@ def run_submit(args) -> None:
 
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
     write_job_sub(
-        run_dir, repo_dir, resources, jobname, cfg["condor"]["omit_request_gpus_when_zero"]
+        run_dir,
+        repo_dir,
+        resources,
+        jobname,
+        submit_host,
+        cfg["condor"]["omit_request_gpus_when_zero"],
     )
     write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
 
@@ -63,6 +70,7 @@ def run_interactive(args) -> None:
     conda = resolve_conda(cfg, args)
 
     repo_dir = Path.cwd()
+    submit_host = socket.getfqdn().lower()
     jobname = args.jobname or "interactive"
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -82,7 +90,12 @@ def run_interactive(args) -> None:
     command = ["/bin/bash", "-i"]
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
     write_job_sub(
-        run_dir, repo_dir, resources, jobname, cfg["condor"]["omit_request_gpus_when_zero"]
+        run_dir,
+        repo_dir,
+        resources,
+        jobname,
+        submit_host,
+        cfg["condor"]["omit_request_gpus_when_zero"],
     )
     write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)
 
