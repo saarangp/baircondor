@@ -1,0 +1,17 @@
+# baircondor example config
+# Copy to ~/.config/baircondor/config.yaml and uncomment/edit as needed.
+# CLI flags always override these values.
+
+defaults:
+  # scratch: ~/condor-scratch        # root dir for all run directories
+  # runs_subdir: condor-runs          # subdirectory under scratch
+  # cpus_per_gpu: 4                   # CPUs allocated per GPU (used to compute default --cpus)
+  # cpus_cpu_only: 4                  # CPUs when --gpus 0
+  # mem_gpu: 24G                      # default memory when GPUs > 0
+  # mem_cpu_only: 8G                  # default memory when --gpus 0
+
+condor:
+  # omit_request_gpus_when_zero: true # don't emit request_gpus in job.sub when --gpus 0
+
+conda:
+  # conda_base: null                  # path to conda install (auto-detected if omitted)

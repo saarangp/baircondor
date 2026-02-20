@@ -23,14 +23,14 @@ _(nothing active)_
 
 ## TODO
 
-### Acceptance (manual, requires lab server with condor)
-- [ ] Batch CPU-only: `baircondor submit --scratch /home/$USER --gpus 0 --cpus 4 --mem 8G -- python -c "print('hi')"`
-- [ ] Batch GPU: `baircondor submit --scratch /raid/$USER --gpus 1 --cpus 8 --mem 32G -- python -c "import torch; print(torch.cuda.is_available())"`
-- [ ] Interactive GPU: `baircondor interactive --scratch /raid/$USER --gpus 1 --cpus 8 --mem 32G`; verify `nvidia-smi`
-- [ ] Interactive with conda: `baircondor interactive --scratch /raid/$USER --gpus 0 --conda-env myenv --cpus 4 --mem 8G`; verify `which python`
+### Acceptance (manual, requires lab server with condor) ✓
+- [x] Batch CPU-only: `baircondor submit --scratch /home/$USER --gpus 0 --cpus 4 --mem 8G -- python -c "print('hi')"`
+- [x] Batch GPU: `baircondor submit --scratch /raid/$USER --gpus 1 --cpus 8 --mem 32G -- python -c "import torch; print(torch.cuda.is_available())"`
+- [x] Interactive GPU: `baircondor interactive --scratch /raid/$USER --gpus 1 --cpus 8 --mem 32G`; verify `nvidia-smi`
+- [x] Interactive with conda: `baircondor interactive --scratch /raid/$USER --gpus 0 --conda-env myenv --cpus 4 --mem 8G`; verify `which python`
 
 ### Nice-to-haves / v1.1
-- [ ] `~/.config/baircondor/config.yaml` example file / template
+- [x] `~/.config/baircondor/config.yaml` example file / template (`examples/config.yaml`)
 - [ ] Shell completion (argcomplete or manual)
 - [ ] Docker support
-- [ ] Python API / pydantic integration: expose a `submit()` function and a `CondorConfig` pydantic model so jobs can be queued programmatically from Python configs (e.g. embed `condor: CondorConfig` in a project's pydantic training config and call `baircondor.submit(command=[...], condor=cfg.condor)`). Key refactor: decouple `resolve_resources` from argparse `Namespace` so it accepts plain kwargs.
+- [x] Python API / pydantic integration: expose a `submit()` function and a `CondorConfig` pydantic model so jobs can be queued programmatically from Python configs (e.g. embed `condor: CondorConfig` in a project's pydantic training config and call `baircondor.submit(command=[...], condor=cfg.condor)`). Implemented via `SimpleNamespace` shim in `baircondor/api.py` — zero internal refactoring needed.
