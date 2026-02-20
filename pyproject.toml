@@ -17,6 +17,7 @@ baircondor = "baircondor.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "flake8",
 ]
 
 [tool.setuptools.packages.find]
