@@ -1,6 +1,7 @@
 """Tests for the Python API (CondorConfig, submit, interactive)."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -23,15 +24,18 @@ def _find_run_dir(scratch_path):
 
 class TestSubmitKwargs:
     def test_creates_run_dir_files(self, scratch):
-        submit(["echo", "hello"], gpus=0, scratch=scratch, dry_run=True)
-        run_dir = _find_run_dir(scratch)
+        run_dir = submit(["echo", "hello"], gpus=0, scratch=scratch, dry_run=True)
+        assert isinstance(run_dir, Path)
+        assert run_dir == _find_run_dir(scratch)
         assert (run_dir / "job.sub").exists()
         assert (run_dir / "run.sh").exists()
         assert (run_dir / "meta.json").exists()
 
     def test_meta_records_command(self, scratch):
-        submit(["python", "train.py", "--lr", "1e-4"], gpus=0, scratch=scratch, dry_run=True)
-        run_dir = _find_run_dir(scratch)
+        run_dir = submit(
+            ["python", "train.py", "--lr", "1e-4"], gpus=0, scratch=scratch, dry_run=True
+        )
+        assert isinstance(run_dir, Path)
         meta = json.loads((run_dir / "meta.json").read_text())
         assert meta["command"] == ["python", "train.py", "--lr", "1e-4"]
         assert meta["mode"] == "batch"
@@ -40,23 +44,25 @@ class TestSubmitKwargs:
 class TestSubmitCondorConfig:
     def test_with_config_object(self, scratch):
         cfg = CondorConfig(gpus=0, scratch=scratch, dry_run=True)
-        submit(["echo", "test"], condor=cfg)
-        run_dir = _find_run_dir(scratch)
+        run_dir = submit(["echo", "test"], condor=cfg)
+        assert isinstance(run_dir, Path)
+        assert run_dir == _find_run_dir(scratch)
         assert (run_dir / "job.sub").exists()
         assert (run_dir / "run.sh").exists()
 
     def test_kwargs_override_config(self, scratch):
         cfg = CondorConfig(gpus=0, scratch=scratch, jobname="from-model")
-        submit(["echo", "test"], condor=cfg, jobname="from-kwarg", dry_run=True)
-        run_dir = _find_run_dir(scratch)
+        run_dir = submit(["echo", "test"], condor=cfg, jobname="from-kwarg", dry_run=True)
+        assert isinstance(run_dir, Path)
         assert "from-kwarg" in str(run_dir)
 
 
 class TestInteractive:
     def test_creates_run_dir(self, scratch):
         cfg = CondorConfig(gpus=0, scratch=scratch, dry_run=True)
-        interactive(condor=cfg)
-        run_dir = _find_run_dir(scratch)
+        run_dir = interactive(condor=cfg)
+        assert isinstance(run_dir, Path)
+        assert run_dir == _find_run_dir(scratch)
         assert (run_dir / "job.sub").exists()
         assert (run_dir / "run.sh").exists()
         meta = json.loads((run_dir / "meta.json").read_text())

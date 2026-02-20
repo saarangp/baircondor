@@ -14,6 +14,7 @@ Usage::
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from pydantic import BaseModel
@@ -49,25 +50,31 @@ def _build_namespace(condor: CondorConfig | None, kwargs: dict) -> SimpleNamespa
     return SimpleNamespace(**base)
 
 
-def submit(command: list[str], condor: CondorConfig | None = None, **kwargs) -> None:
+def submit(command: list[str], condor: CondorConfig | None = None, **kwargs) -> Path:
     """Submit a batch job.
 
     Args:
         command: The command to run (e.g. ``["python", "train.py"]``).
         condor: Optional :class:`CondorConfig` instance.
         **kwargs: Individual overrides (same names as CondorConfig fields).
+
+    Returns:
+        Path to the created run directory.
     """
     ns = _build_namespace(condor, kwargs)
     ns.command = command
-    run_submit(ns)
+    return run_submit(ns)
 
 
-def interactive(condor: CondorConfig | None = None, **kwargs) -> None:
+def interactive(condor: CondorConfig | None = None, **kwargs) -> Path:
     """Start an interactive condor session.
 
     Args:
         condor: Optional :class:`CondorConfig` instance.
         **kwargs: Individual overrides (same names as CondorConfig fields).
+
+    Returns:
+        Path to the created run directory.
     """
     ns = _build_namespace(condor, kwargs)
-    run_interactive(ns)
+    return run_interactive(ns)
