@@ -66,7 +66,7 @@ All options work for both `submit` and `interactive`:
 | `--project NAME` | *(omitted)* | Extra grouping folder inside `condor-runs/` |
 | `--tag TAG` | *(omitted)* | Appended to run dir name |
 | `--conda-env ENV` | *(omitted)* | Conda env to activate before running |
-| `--conda-base PATH` | from config | Path to conda installation |
+| `--conda-base PATH` | from config or auto-detect | Path to conda installation |
 | `--dry-run` | `false` | Generate files only; don't call condor |
 | `--config PATH` | `~/.config/baircondor/config.yaml` | Config file override |
 

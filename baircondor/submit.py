@@ -130,7 +130,10 @@ def _make_run_dir(
 
 def _validate_conda(conda: dict) -> None:
     if conda.get("env") and not conda.get("conda_base"):
-        sys.exit("error: --conda-env requires --conda-base or conda.conda_base in config")
+        sys.exit(
+            "error: --conda-env requires a conda base path; auto-detection failed. "
+            "Set --conda-base or conda.conda_base in config."
+        )
 
 
 def _condor_escape_arg(arg: str) -> str:

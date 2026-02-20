@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -66,7 +68,34 @@ def resolve_resources(cfg: dict, args) -> dict[str, Any]:
 def resolve_conda(cfg: dict, args) -> dict[str, str | None]:
     conda_env = getattr(args, "conda_env", None)
     conda_base = getattr(args, "conda_base", None) or cfg["conda"]["conda_base"]
+    if conda_env and not conda_base:
+        conda_base = _autodetect_conda_base()
     return {"env": conda_env, "conda_base": conda_base}
+
+
+def _autodetect_conda_base() -> str | None:
+    try:
+        result = subprocess.run(
+            ["conda", "info", "--base"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        result = None
+
+    if result and result.returncode == 0:
+        base = result.stdout.strip()
+        if base:
+            return str(Path(base).expanduser())
+
+    conda_exe = os.environ.get("CONDA_EXE")
+    if conda_exe:
+        conda_path = Path(conda_exe).expanduser()
+        if conda_path.name == "conda":
+            return str(conda_path.parent.parent)
+
+    return None
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
