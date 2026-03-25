@@ -1,9 +1,11 @@
 """Tests for job.sub generation."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from baircondor import submit as submit_mod
 from baircondor.submit import _condor_escape_arg, _patch_args
 from baircondor.templates import write_job_sub
 
@@ -136,3 +138,63 @@ class TestPatchArgs:
         assert "universe = vanilla\n" in text
         assert "getenv = True\n" in text
         assert 'arguments = "/home/user/run.sh -- python test.py"' in text
+
+
+def test_get_submit_host_uses_hostname_f(monkeypatch):
+    monkeypatch.setattr(
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
+    )
+
+    assert submit_mod._get_submit_host() == "redlradadm35840.ad.medctr.ucla.edu"
+
+
+def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        submit_mod,
+        "load_config",
+        lambda _: {
+            "defaults": {"scratch": str(tmp_path / "scratch"), "runs_subdir": "condor-runs"},
+            "conda": {},
+            "condor": {"omit_request_gpus_when_zero": True},
+        },
+    )
+    monkeypatch.setattr(
+        submit_mod,
+        "resolve_resources",
+        lambda cfg, args: {
+            "gpus": 0,
+            "cpus": 4,
+            "mem": "8G",
+            "disk": None,
+        },
+    )
+    monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
+    monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
+    monkeypatch.setattr(submit_mod, "_submit", lambda *args: None)
+    monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    args = SimpleNamespace(
+        config=None,
+        command=["--", "echo", "hello"],
+        jobname="job",
+        scratch=None,
+        runs_subdir=None,
+        project=None,
+        tag=None,
+        dry_run=True,
+    )
+
+    submit_mod.run_submit(args)
+
+    job_sub_files = list((tmp_path / "scratch" / "condor-runs").glob("**/job.sub"))
+    assert len(job_sub_files) == 1
+    text = job_sub_files[0].read_text()
+    assert 'requirements = (toLower(Machine) == "redlradadm35840.ad.medctr.ucla.edu")' in text

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import random
-import socket
 import string
 import subprocess
 import sys
@@ -14,6 +13,11 @@ from pathlib import Path
 from .config import load_config, resolve_conda, resolve_resources
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
+
+
+def _get_submit_host() -> str:
+    """Return the submit host exactly as reported by the local host configuration."""
+    return subprocess.check_output(["hostname", "-f"], text=True).strip().lower()
 
 
 def run_submit(args) -> None:
@@ -29,7 +33,7 @@ def run_submit(args) -> None:
         sys.exit("error: a command is required after --")
 
     repo_dir = Path.cwd()
-    submit_host = socket.getfqdn().lower()
+    submit_host = _get_submit_host()
     jobname = args.jobname or repo_dir.name
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -70,7 +74,7 @@ def run_interactive(args) -> None:
     conda = resolve_conda(cfg, args)
 
     repo_dir = Path.cwd()
-    submit_host = socket.getfqdn().lower()
+    submit_host = _get_submit_host()
     jobname = args.jobname or "interactive"
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
