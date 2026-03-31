@@ -34,54 +34,88 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         "--scratch",
         default=None,
         metavar="PATH",
-        help="Scratch directory for run dirs (default: ~/condor-scratch).",
+        help="Root directory for run dirs (default: ~/condor-scratch). "
+        "Use fast local storage like /raid/$USER for GPU servers.",
     )
     p.add_argument(
-        "--jobname", metavar="NAME", help="Job name (default: repo dir name or 'interactive')."
+        "--jobname",
+        metavar="NAME",
+        help="Job name used in the run dir path and condor's JobBatchName "
+        "(default: current directory name, or 'interactive').",
     )
     p.add_argument(
         "--gpus",
         type=int,
         default=1,
         metavar="N",
-        help="Number of GPUs to request (0 for CPU-only). Default: 1.",
+        help="Number of GPUs to request. Use 0 for CPU-only jobs. Default: 1.",
     )
     p.add_argument(
         "--cpus",
         type=int,
         metavar="N",
-        help="Number of CPUs (default: gpus * cpus_per_gpu or cpus_cpu_only).",
+        help="Number of CPUs. Default: 4 per GPU, or 4 for CPU-only jobs. "
+        "Override in config with cpus_per_gpu / cpus_cpu_only.",
     )
     p.add_argument(
-        "--mem", metavar="MEM", help="Memory request, passed verbatim (e.g. 32G, 12000MB)."
+        "--mem",
+        metavar="MEM",
+        help="Memory request, passed verbatim to condor (e.g. 32G, 12000MB). "
+        "Default: 24G for GPU jobs, 8G for CPU-only.",
     )
-    p.add_argument("--disk", metavar="DISK", help="Disk request, passed verbatim.")
-    p.add_argument("--tag", metavar="TAG", help="Optional string appended to run dir name.")
-    p.add_argument("--project", metavar="NAME", help="Optional grouping folder inside runs_subdir.")
+    p.add_argument(
+        "--disk",
+        metavar="DISK",
+        help="Disk request, passed verbatim to condor (e.g. 10G). Omitted by default.",
+    )
+    p.add_argument(
+        "--tag",
+        metavar="TAG",
+        help="String appended to the run dir name. "
+        "Example: --tag smoke-test creates .../20260219_161635_abc123_smoke-test/",
+    )
+    p.add_argument(
+        "--project",
+        metavar="NAME",
+        help="Grouping folder inserted into the run dir path. "
+        "Example: --project eegfm creates .../condor-runs/$USER/eegfm/<jobname>/...",
+    )
     p.add_argument(
         "--runs-subdir",
         default=None,
         metavar="NAME",
         help="Subdirectory under scratch for all runs (default: condor-runs).",
     )
-    p.add_argument("--conda-env", metavar="ENVNAME", help="Conda environment to activate.")
-    p.add_argument("--conda-base", metavar="PATH", help="Conda installation base path.")
+    p.add_argument(
+        "--conda-env",
+        metavar="ENVNAME",
+        help="Conda environment to activate before running your command.",
+    )
+    p.add_argument(
+        "--conda-base",
+        metavar="PATH",
+        help="Path to conda installation (e.g. /raid/$USER/miniconda3). "
+        "Auto-detected if omitted.",
+    )
     p.add_argument(
         "--pin-submit-host",
         dest="pin_submit_host",
         action="store_true",
         default=None,
-        help="Pin job to the submit host.",
+        help="Pin job to the server you submitted from (default: on).",
     )
     p.add_argument(
         "--no-pin-submit-host",
         dest="pin_submit_host",
         action="store_false",
         default=None,
-        help="Allow scheduling on any eligible host.",
+        help="Allow condor to schedule the job on any eligible host.",
     )
     p.add_argument(
-        "--dry-run", action="store_true", help="Generate files but do not call condor_submit."
+        "--dry-run",
+        action="store_true",
+        help="Generate run dir and files but do not call condor_submit. "
+        "Useful for checking job.sub before submitting.",
     )
 
 

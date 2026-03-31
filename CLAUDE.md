@@ -48,7 +48,7 @@ spec.md         — full v1 specification (source of truth for behavior)
 
 **Memory defaults (v1):** No per-GPU scaling — single string defaults (`mem_gpu = "24G"`, `mem_cpu_only = "8G"`). Memory strings are passed through verbatim.
 
-**CPU defaults:** `cpus = gpus * cpus_per_gpu` (default 6 per GPU) or `cpus_cpu_only` (default 4) when `--gpus 0`.
+**CPU defaults:** `cpus = gpus * cpus_per_gpu` (default 4 per GPU) or `cpus_cpu_only` (default 4) when `--gpus 0`.
 
 **No v1 features:** No `transfer_input_files`, no `requirements` expressions, no Docker, no retry logic, no sweep/array abstraction.
 
@@ -72,5 +72,10 @@ baircondor submit --gpus 0 --dry-run -- echo hello
 ## General Instructions
 - Please use the AskUserQuestion liberally to understand intent and plan carefully
 - avoid "slop code" (unnecessary functions, functions inside functions, unnecessary checks)
-- respect the pre-commit hokos
-- run tests if they exist after changes, write new ones and then run before making any changes if they dont! 
+- respect the pre-commit hooks
+- run tests if they exist after changes, write new ones and then run before making any changes if they dont!
+
+## Tool Preferences
+- Prefer serena MCP tools (find_symbol, get_symbols_overview, replace_symbol_body, etc.) over Read/Grep/Edit for navigating and modifying Python code. Serena understands symbol structure and avoids reading entire files unnecessarily, saving tokens.
+- Use serena's onboarding/check_onboarding_performed at session start for unfamiliar parts of the codebase.
+- Fall back to Read/Grep/Edit for non-Python files, config files, docs, and when serena tools are unavailable. 

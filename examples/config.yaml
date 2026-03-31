@@ -1,6 +1,19 @@
 # baircondor example config
 # Copy to ~/.config/baircondor/config.yaml and uncomment/edit as needed.
 # CLI flags always override these values.
+#
+# Realistic lab example (uncomment and adjust paths):
+#
+#   defaults:
+#     scratch: /raid/myuser              # fast local storage instead of ~/condor-scratch
+#     cpus_per_gpu: 8                    # 8 CPUs per GPU (e.g. for dataloading workers)
+#     mem_gpu: "48G"                     # more memory for large models
+#
+#   conda:
+#     conda_base: /raid/myuser/miniconda3
+#
+#   condor:
+#     pin_submit_host: true              # default: jobs run on the server you SSH into
 
 defaults:
   # scratch: ~/condor-scratch        # root dir for all run directories
@@ -12,6 +25,7 @@ defaults:
 
 condor:
   # omit_request_gpus_when_zero: true # don't emit request_gpus in job.sub when --gpus 0
+  # pin_submit_host: true             # pin jobs to the server you submitted from
 
 conda:
   # conda_base: null                  # path to conda install (auto-detected if omitted)
