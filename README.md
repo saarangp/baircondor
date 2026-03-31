@@ -36,6 +36,11 @@ baircondor interactive --gpus 1 --mem 32G
 baircondor submit --gpus 0 --dry-run -- echo hello
 ```
 
+**Tagged run dir (helpful for smoke tests / sweeps):**
+```bash
+baircondor submit --gpus 1 --tag smoke-test -- python examples/gpu_test.py
+```
+
 ## What it does
 
 For every submission, baircondor creates a timestamped run directory under your scratch path (`~/condor-scratch` by default, auto-created if missing):

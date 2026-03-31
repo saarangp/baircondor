@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from baircondor.submit import _condor_escape_arg, _patch_args
+from baircondor.submit import _condor_escape_arg, _get_submit_host, _patch_args, run_submit
 from baircondor.templates import write_job_sub
 
 
@@ -150,3 +150,38 @@ class TestPatchArgs:
         assert "universe = vanilla\n" in text
         assert "getenv = True\n" in text
         assert 'arguments = "/home/user/run.sh -- python test.py"' in text
+
+
+def test_get_submit_host_uses_hostname_f(monkeypatch):
+    monkeypatch.setattr(
+        "subprocess.check_output",
+        lambda cmd, text=True: "submit-host.example.com\n",
+    )
+    assert _get_submit_host() == "submit-host.example.com"
+
+
+def test_run_submit_pins_to_hostname_f(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("baircondor.submit._get_submit_host", lambda: "submit-host.example.com")
+    monkeypatch.setattr("baircondor.submit._submit", lambda *args: None)
+
+    class Args:
+        config = None
+        gpus = 0
+        cpus = None
+        mem = None
+        disk = None
+        jobname = None
+        scratch = str(tmp_path / "scratch")
+        runs_subdir = None
+        project = None
+        tag = None
+        conda_env = None
+        conda_base = None
+        dry_run = True
+        pin_submit_host = None
+        command = ["echo", "hello"]
+
+    run_submit(Args())
+    job_sub = next((tmp_path / "scratch").rglob("job.sub"))
+    assert 'requirements = (toLower(Machine) == "submit-host.example.com")' in job_sub.read_text()
