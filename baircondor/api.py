@@ -17,13 +17,15 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from baircondor.submit import run_interactive, run_submit
 
 
 class CondorConfig(BaseModel):
     """HTCondor resource configuration, embeddable in any pydantic model."""
+
+    model_config = ConfigDict(extra="forbid")
 
     gpus: int = 1
     cpus: int | None = None

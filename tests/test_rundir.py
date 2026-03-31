@@ -39,3 +39,8 @@ def test_run_dir_scratch_auto_created(tmp_path):
 def test_run_dir_is_unique(tmp_path):
     dirs = {_make_run_dir(str(tmp_path), "condor-runs", "myjob", None, None) for _ in range(20)}
     assert len(dirs) == 20
+
+
+def test_run_dir_tag_is_appended(tmp_path):
+    run_dir = _make_run_dir(str(tmp_path), "condor-runs", "myjob", None, "experiment-a")
+    assert run_dir.name.endswith("_experiment-a")

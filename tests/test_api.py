@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from baircondor.api import CondorConfig, interactive, submit
 
@@ -102,3 +103,7 @@ class TestCondorConfigDefaults:
         assert d["mem"] == "32G"
         cfg2 = CondorConfig(**d)
         assert cfg2 == cfg
+
+    def test_unknown_fields_are_rejected(self):
+        with pytest.raises(ValidationError):
+            CondorConfig(gps=2)

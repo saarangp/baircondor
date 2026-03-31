@@ -131,6 +131,9 @@ print(f"Submitted. Run dir: {run_dir}")
 # Or with plain kwargs
 run_dir = submit(["python", "train.py"], gpus=1, dry_run=True)
 
+# Tag the run directory for easier grouping
+run_dir = submit(["python", "train.py"], gpus=1, tag="smoke-test", dry_run=True)
+
 # Interactive session
 from baircondor import interactive
 run_dir = interactive(condor=CondorConfig(gpus=1, mem="32G"))
@@ -197,7 +200,7 @@ python run_pretraining.py configs/pretrain.yaml --condor
 python run_pretraining.py configs/pretrain.yaml
 ```
 
-Since `CondorConfig` is a pydantic model, it validates the condor section of your YAML at load time — typos like `gps: 2` or `mem: 32` (missing the `G`) will raise immediately rather than failing silently on the cluster.
+Since `CondorConfig` is a pydantic model, it validates the condor section of your YAML at load time. Unknown fields like `gps: 2` raise immediately rather than being ignored silently.
 
 
 ## Status
