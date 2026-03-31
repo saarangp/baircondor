@@ -118,89 +118,126 @@ pre-commit install
 
 ## Python API
 
-You can also submit jobs programmatically — useful for embedding condor config in your own pydantic training configs:
+The Python API is a low-level submission primitive for experiment repos. `baircondor`
+handles job submission and resource metadata; your training repo still owns config
+validation, config mutation, sweep generation, and queue orchestration.
+
+The public API stays intentionally small:
+- `CondorConfig`
+- `submit(command, condor=..., **kwargs)`
+- `interactive(condor=..., **kwargs)`
+
+This means `run_many`-style helpers are not built into baircondor in this PR.
+The intended pattern is that caller code generates validated config variants and
+calls `submit(...)` repeatedly.
+
+### Pattern 1: embed condor settings in a validated config
+
+If your launcher already validates experiment configs with pydantic, keep
+submission metadata next to the rest of the experiment config:
 
 ```python
-from baircondor import CondorConfig, submit
+from pydantic import BaseModel
 
-# Using a CondorConfig model (embed in your own pydantic configs)
-cfg = CondorConfig(gpus=2, mem="32G", conda_env="train")
-run_dir = submit(["python", "train.py", "--lr", "1e-4"], condor=cfg)
-print(f"Submitted. Run dir: {run_dir}")
+from baircondor import CondorConfig
 
-# Or with plain kwargs
-run_dir = submit(["python", "train.py"], gpus=1, dry_run=True)
 
-# Tag the run directory for easier grouping
-run_dir = submit(["python", "train.py"], gpus=1, tag="smoke-test", dry_run=True)
+class ExperimentConfig(BaseModel):
+    data: dict
+    model: dict
+    trainer_config: dict
+    logger_config: dict
+    condor: CondorConfig
 
-# Interactive session
-from baircondor import interactive
-run_dir = interactive(condor=CondorConfig(gpus=1, mem="32G"))
+
+config = ExperimentConfig(
+    data={"batch_size": 256, "num_workers": 4},
+    model={"name": "EEGLEJEPA"},
+    trainer_config={"devices": [0]},
+    logger_config={"group": "v2_lejepa_pretraining"},
+    condor=CondorConfig(
+        gpus=1,
+        mem="32G",
+        conda_env="train",
+        jobname="lejepa-pretrain",
+        project="eegfm",
+    ),
+)
 ```
 
-Both `submit()` and `interactive()` return a `pathlib.Path` to the created run directory, so you can log it, save it to a config, or reference outputs after the job completes.
+Since `CondorConfig` is a pydantic model, unknown `condor` fields like `gps: 2`
+raise immediately rather than being ignored silently.
 
-`CondorConfig` fields mirror the CLI flags (same names, same defaults). Kwargs override the model, matching the "CLI flags always win" convention.
+### Pattern 2: self-submit one validated config
 
-### Example: `--condor` flag in a training script
+The common pattern is: load config, validate it, and optionally re-invoke your
+existing training entrypoint through `submit(...)`.
 
-A common pattern is to keep condor settings in your training config YAML, then add a `--condor` flag to your runner script. When the flag is set, the script submits *itself* to condor (without the flag) and exits. Otherwise it trains locally as usual.
-
-**Config (e.g. `configs/pretrain.yaml`):**
-```yaml
-model:
-  hidden_dim: 256
-  num_layers: 4
-
-training:
-  lr: 1e-4
-  epochs: 100
-
-condor:
-  gpus: 2
-  mem: "32G"
-  conda_env: "train"
-```
-
-**Runner script (e.g. `run_pretraining.py`):**
 ```python
 import argparse
 from pathlib import Path
 
-import yaml
+from baircondor import submit
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("config", type=Path)
-    parser.add_argument("--condor", action="store_true", help="Submit to condor instead of running locally")
+    parser.add_argument("--condor", action="store_true")
     args = parser.parse_args()
 
-    config = yaml.safe_load(args.config.read_text())
+    config = load_and_validate_config(args.config)  # returns your pydantic config object
 
     if args.condor:
-        from baircondor import CondorConfig, submit
-
-        condor_cfg = CondorConfig(**config["condor"])
-        # Re-invoke this script without --condor, so it trains normally inside the job
-        run_dir = submit(["python", __file__, str(args.config)], condor=condor_cfg)
+        run_dir = submit(
+            ["python", "run_pretraining.py", str(args.config)],
+            condor=config.condor,
+            tag=config.logger_config.group,
+        )
         print(f"Submitted. Run dir: {run_dir}")
         return
 
-    # Normal training — runs locally or inside the condor job
     train(config)
 ```
 
-```bash
-# Submit to condor
-python run_pretraining.py configs/pretrain.yaml --condor
+### Pattern 3: caller-owned sweep loops
 
-# Run locally (e.g. for debugging)
-python run_pretraining.py configs/pretrain.yaml
+For sweeps, keep the loop in your experiment repo. Start from one validated base
+config, clone or update the fields you care about, derive per-run metadata such
+as `jobname` and `tag`, and call `submit(...)` for each variant.
+
+```python
+from copy import deepcopy
+from itertools import product
+
+from baircondor import submit
+
+
+run_dirs = []
+for lr, batch_size in product([1e-4, 3e-4], [128, 256]):
+    variant = deepcopy(base_config)
+    variant.optimizer.kwargs.lr = lr
+    variant.data.batch_size = batch_size
+
+    suffix = f"lr{lr:g}-bs{batch_size}"
+    run_dir = submit(
+        ["python", "run_pretraining_from_config.py", "--config", f"generated/{suffix}.py"],
+        condor=variant.condor,
+        jobname="lejepa-pretrain",
+        project="eegfm",
+        tag=suffix,
+    )
+    run_dirs.append(run_dir)
 ```
 
-Since `CondorConfig` is a pydantic model, it validates the condor section of your YAML at load time. Unknown fields like `gps: 2` raise immediately rather than being ignored silently.
+In practice, experiment repos usually materialize each variant into a generated
+config artifact before calling `submit(...)`. baircondor does not do that
+serialization for you.
+
+Both `submit()` and `interactive()` return a `pathlib.Path` to the created run
+directory, so caller code can track queued runs immediately.
+
+See `examples/python_api_patterns.py` for a concrete reference example.
 
 
 ## Status
