@@ -41,6 +41,11 @@ baircondor submit --gpus 0 --dry-run -- echo hello
 baircondor submit --gpus 1 --tag smoke-test -- python examples/gpu_test.py
 ```
 
+**Allow scheduling on any eligible host:**
+```bash
+baircondor submit --no-pin-submit-host --gpus 1 -- python examples/gpu_test.py
+```
+
 ## What it does
 
 For every submission, baircondor creates a timestamped run directory under your scratch path (`~/condor-scratch` by default, auto-created if missing):
@@ -99,6 +104,13 @@ condor:
 ```
 
 CLI flags always override the config file.
+
+If you want host pinning off by default, set:
+
+```yaml
+condor:
+  pin_submit_host: false
+```
 
 ## Environment variables available in your job
 
