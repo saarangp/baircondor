@@ -1,13 +1,15 @@
 """Tests for job.sub generation."""
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from baircondor import submit as submit_mod
 from baircondor.submit import _condor_escape_arg, _patch_args
 from baircondor.templates import write_job_sub
+
+submit_mod = importlib.import_module("baircondor.submit")
 
 
 @pytest.fixture

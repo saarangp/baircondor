@@ -134,10 +134,136 @@ pip install pre-commit
 pre-commit install
 ```
 
+
+## Python API
+
+The Python API is a low-level submission primitive for experiment repos. `baircondor`
+handles job submission and resource metadata; your training repo still owns config
+validation, config mutation, sweep generation, and queue orchestration.
+
+The public API stays intentionally small:
+- `CondorConfig`
+- `submit(command, condor=..., **kwargs)`
+- `interactive(condor=..., **kwargs)`
+
+This means `run_many`-style helpers are not built into baircondor in this PR.
+The intended pattern is that caller code generates validated config variants and
+calls `submit(...)` repeatedly.
+
+### Pattern 1: embed condor settings in a validated config
+
+If your launcher already validates experiment configs with pydantic, keep
+submission metadata next to the rest of the experiment config:
+
+```python
+from pydantic import BaseModel
+
+from baircondor import CondorConfig
+
+
+class ExperimentConfig(BaseModel):
+    data: dict
+    model: dict
+    trainer_config: dict
+    logger_config: dict
+    condor: CondorConfig
+
+
+config = ExperimentConfig(
+    data={"batch_size": 256, "num_workers": 4},
+    model={"name": "EEGLEJEPA"},
+    trainer_config={"devices": [0]},
+    logger_config={"group": "v2_lejepa_pretraining"},
+    condor=CondorConfig(
+        gpus=1,
+        mem="32G",
+        conda_env="train",
+        jobname="lejepa-pretrain",
+        project="eegfm",
+    ),
+)
+```
+
+Since `CondorConfig` is a pydantic model, unknown `condor` fields like `gps: 2`
+raise immediately rather than being ignored silently.
+
+### Pattern 2: self-submit one validated config
+
+The common pattern is: load config, validate it, and optionally re-invoke your
+existing training entrypoint through `submit(...)`.
+
+```python
+import argparse
+from pathlib import Path
+
+from baircondor import submit
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config", type=Path)
+    parser.add_argument("--condor", action="store_true")
+    args = parser.parse_args()
+
+    config = load_and_validate_config(args.config)  # returns your pydantic config object
+
+    if args.condor:
+        run_dir = submit(
+            ["python", "run_pretraining.py", str(args.config)],
+            condor=config.condor,
+            tag=config.logger_config.group,
+        )
+        print(f"Submitted. Run dir: {run_dir}")
+        return
+
+    train(config)
+```
+
+### Pattern 3: caller-owned sweep loops
+
+For sweeps, keep the loop in your experiment repo. Start from one validated base
+config, clone or update the fields you care about, derive per-run metadata such
+as `jobname` and `tag`, and call `submit(...)` for each variant.
+
+```python
+from copy import deepcopy
+from itertools import product
+
+from baircondor import submit
+
+
+run_dirs = []
+for lr, batch_size in product([1e-4, 3e-4], [128, 256]):
+    variant = deepcopy(base_config)
+    variant.optimizer.kwargs.lr = lr
+    variant.data.batch_size = batch_size
+
+    suffix = f"lr{lr:g}-bs{batch_size}"
+    run_dir = submit(
+        ["python", "run_pretraining_from_config.py", "--config", f"generated/{suffix}.py"],
+        condor=variant.condor,
+        jobname="lejepa-pretrain",
+        project="eegfm",
+        tag=suffix,
+    )
+    run_dirs.append(run_dir)
+```
+
+In practice, experiment repos usually materialize each variant into a generated
+config artifact before calling `submit(...)`. baircondor does not do that
+serialization for you.
+
+Both `submit()` and `interactive()` return a `pathlib.Path` to the created run
+directory, so caller code can track queued runs immediately.
+
+See `examples/python_api_patterns.py` for a concrete reference example.
+
+
 ## Status
 
 **What works today:**
 - `submit` and `interactive` subcommands with full run-dir generation (`job.sub`, `run.sh`, `meta.json`)
+- Python API: `CondorConfig` pydantic model + `submit()` / `interactive()` functions
 - Config cascade (built-in defaults → `~/.config/baircondor/config.yaml` → CLI flags)
 - `--dry-run` mode (no condor needed)
 - Conda env activation

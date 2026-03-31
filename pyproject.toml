@@ -9,6 +9,7 @@ description = "HTCondor job submission helper for BAIR lab GPU servers"
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml",
+    "pydantic",
 ]
 
 [project.scripts]

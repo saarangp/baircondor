@@ -20,7 +20,7 @@ def _get_submit_host() -> str:
     return subprocess.check_output(["hostname", "-f"], text=True).strip().lower()
 
 
-def run_submit(args) -> None:
+def run_submit(args) -> Path:
     cfg = load_config(getattr(args, "config", None))
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
@@ -69,8 +69,10 @@ def run_submit(args) -> None:
 
     _submit(job_sub, args.dry_run, run_dir, repo_dir)
 
+    return run_dir
 
-def run_interactive(args) -> None:
+
+def run_interactive(args) -> Path:
     cfg = load_config(getattr(args, "config", None))
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
@@ -111,6 +113,8 @@ def run_interactive(args) -> None:
     _patch_args(job_sub, run_sh, command)
 
     _submit_interactive(job_sub, args.dry_run, run_dir)
+
+    return run_dir
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
