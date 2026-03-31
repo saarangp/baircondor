@@ -1,10 +1,12 @@
 """Tests for job.sub generation."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from baircondor.submit import _condor_escape_arg, _get_submit_host, _patch_args, run_submit
+from baircondor import submit as submit_mod
+from baircondor.submit import _condor_escape_arg, _patch_args
 from baircondor.templates import write_job_sub
 
 
@@ -154,34 +156,63 @@ class TestPatchArgs:
 
 def test_get_submit_host_uses_hostname_f(monkeypatch):
     monkeypatch.setattr(
-        "subprocess.check_output",
-        lambda cmd, text=True: "submit-host.example.com\n",
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
     )
-    assert _get_submit_host() == "submit-host.example.com"
+
+    assert submit_mod._get_submit_host() == "redlradadm35840.ad.medctr.ucla.edu"
 
 
-def test_run_submit_pins_to_hostname_f(tmp_path, monkeypatch):
+def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        submit_mod,
+        "load_config",
+        lambda _: {
+            "defaults": {"scratch": str(tmp_path / "scratch"), "runs_subdir": "condor-runs"},
+            "conda": {},
+            "condor": {
+                "omit_request_gpus_when_zero": True,
+                "pin_submit_host": True,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        submit_mod,
+        "resolve_resources",
+        lambda cfg, args: {
+            "gpus": 0,
+            "cpus": 4,
+            "mem": "8G",
+            "disk": None,
+        },
+    )
+    monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
+    monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
+    monkeypatch.setattr(submit_mod, "_submit", lambda *args: None)
+    monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
+    )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("baircondor.submit._get_submit_host", lambda: "submit-host.example.com")
-    monkeypatch.setattr("baircondor.submit._submit", lambda *args: None)
 
-    class Args:
-        config = None
-        gpus = 0
-        cpus = None
-        mem = None
-        disk = None
-        jobname = None
-        scratch = str(tmp_path / "scratch")
-        runs_subdir = None
-        project = None
-        tag = None
-        conda_env = None
-        conda_base = None
-        dry_run = True
-        pin_submit_host = None
-        command = ["echo", "hello"]
+    args = SimpleNamespace(
+        config=None,
+        command=["--", "echo", "hello"],
+        jobname="job",
+        scratch=None,
+        runs_subdir=None,
+        project=None,
+        tag=None,
+        dry_run=True,
+        pin_submit_host=None,
+    )
 
-    run_submit(Args())
-    job_sub = next((tmp_path / "scratch").rglob("job.sub"))
-    assert 'requirements = (toLower(Machine) == "submit-host.example.com")' in job_sub.read_text()
+    submit_mod.run_submit(args)
+
+    job_sub_files = list((tmp_path / "scratch" / "condor-runs").glob("**/job.sub"))
+    assert len(job_sub_files) == 1
+    text = job_sub_files[0].read_text()
+    assert 'requirements = (toLower(Machine) == "redlradadm35840.ad.medctr.ucla.edu")' in text

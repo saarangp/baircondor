@@ -61,7 +61,7 @@ For every submission, baircondor creates a timestamped run directory under your 
 ```
 
 `initialdir` in `job.sub` is set to your current working directory (the repo), so relative paths in your scripts behave exactly like they do interactively.
-By default, `requirements` in `job.sub` is set to the submit host (`toLower(Machine) == "<submit-host>"`), so jobs run on the same server where you submitted. Use `--no-pin-submit-host` to disable host pinning.
+By default, `requirements` in `job.sub` is set to the submit host reported by `hostname -f` (`toLower(Machine) == "<submit-host>"`), so jobs run on the same server where you submitted. Use `--no-pin-submit-host` to disable host pinning.
 
 ## CLI reference
 
