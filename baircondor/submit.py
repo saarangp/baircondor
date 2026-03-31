@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from .config import load_config, resolve_conda, resolve_resources
+from .config import load_config, resolve_conda, resolve_pin_submit_host, resolve_resources
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
 
@@ -24,6 +24,7 @@ def run_submit(args) -> None:
     cfg = load_config(getattr(args, "config", None))
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
+    pin_submit_host = resolve_pin_submit_host(cfg, args)
 
     # strip leading "--" separator that argparse REMAINDER captures
     command = args.command
@@ -57,6 +58,7 @@ def run_submit(args) -> None:
         resources,
         jobname,
         submit_host,
+        pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
     )
     write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
@@ -72,6 +74,7 @@ def run_interactive(args) -> None:
     cfg = load_config(getattr(args, "config", None))
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
+    pin_submit_host = resolve_pin_submit_host(cfg, args)
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
@@ -99,6 +102,7 @@ def run_interactive(args) -> None:
         resources,
         jobname,
         submit_host,
+        pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
     )
     write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)
@@ -124,6 +128,8 @@ def _make_run_dir(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     shortid = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
     dirname = f"{timestamp}_{shortid}"
+    if tag:
+        dirname = f"{dirname}_{tag}"
 
     parts = [scratch_path, runs_subdir, user]
     if project:

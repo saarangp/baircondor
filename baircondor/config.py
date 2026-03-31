@@ -20,6 +20,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "condor": {
         "omit_request_gpus_when_zero": True,
+        "pin_submit_host": True,
     },
     "conda": {
         "conda_base": None,
@@ -71,6 +72,13 @@ def resolve_conda(cfg: dict, args) -> dict[str, str | None]:
     if conda_env and not conda_base:
         conda_base = _autodetect_conda_base()
     return {"env": conda_env, "conda_base": conda_base}
+
+
+def resolve_pin_submit_host(cfg: dict, args) -> bool:
+    pin_submit_host = getattr(args, "pin_submit_host", None)
+    if pin_submit_host is None:
+        return bool(cfg["condor"]["pin_submit_host"])
+    return pin_submit_host
 
 
 def _autodetect_conda_base() -> str | None:
