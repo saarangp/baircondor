@@ -1,23 +1,5 @@
 # Examples
 
-## `python_api_patterns.py`
-
-Reference patterns for experiment repos that already validate configs with pydantic.
-
-It shows:
-- embedding `CondorConfig` inside a validated experiment config model
-- submitting one validated config through an existing entrypoint
-- generating sweep variants in caller code and repeatedly calling `submit(...)`
-
-### Usage
-
-```bash
-python examples/python_api_patterns.py
-```
-
-The file is intentionally a pattern example, not a built-in queue helper. It uses
-`dry_run=True` and placeholder generated-config paths to show how an experiment
-repo would layer its own serialization and sweep logic on top of baircondor.
 
 ## `gpu_test.py`
 
@@ -65,3 +47,21 @@ Matmul time:  0.0842s
 Result saved: /tmp/runs/user/gpu-test/20260219_150000_abc123/result.json
 PASS
 ```
+## `python_api_patterns.py`
+
+Reference patterns for experiment repos that already validate configs with pydantic.
+
+It shows:
+- embedding `CondorConfig` inside a validated experiment config model
+- submitting one validated config through an existing entrypoint
+- generating sweep variants in caller code and repeatedly calling `submit(...)`
+
+### Usage
+
+```bash
+python examples/python_api_patterns.py
+```
+
+The file is intentionally a pattern example, not a built-in queue helper. It uses
+`dry_run=True` and placeholder generated-config paths to show how an experiment
+repo would layer its own serialization and sweep logic on top of baircondor.
