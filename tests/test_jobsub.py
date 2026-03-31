@@ -2,11 +2,14 @@
 
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from baircondor.submit import _condor_escape_arg, _get_submit_host, _patch_args, run_submit
+from baircondor.submit import _condor_escape_arg, _patch_args
 from baircondor.templates import write_job_sub
+
+submit_mod = importlib.import_module("baircondor.submit")
 
 
 @pytest.fixture
@@ -19,8 +22,16 @@ def repo_dir(tmp_path):
     return tmp_path / "repo"
 
 
-def _sub_text(run_dir, repo_dir, resources, jobname="myjob", omit_zero=True):
-    write_job_sub(run_dir, repo_dir, resources, jobname, "submit-host.example.com", omit_zero)
+def _sub_text(run_dir, repo_dir, resources, jobname="myjob", pin_submit_host=True, omit_zero=True):
+    write_job_sub(
+        run_dir,
+        repo_dir,
+        resources,
+        jobname,
+        "submit-host.example.com",
+        pin_submit_host,
+        omit_zero,
+    )
     return (run_dir / "job.sub").read_text()
 
 
@@ -38,6 +49,12 @@ def test_required_fields_present(run_dir, repo_dir):
     assert "request_memory = 24G" in text
     assert 'requirements = (toLower(Machine) == "submit-host.example.com")' in text
     assert "request_gpus = 1" in text
+
+
+def test_host_pinning_can_be_disabled(run_dir, repo_dir):
+    resources = {"gpus": 1, "cpus": 6, "mem": "24G", "disk": None}
+    text = _sub_text(run_dir, repo_dir, resources, pin_submit_host=False)
+    assert "requirements =" not in text
 
 
 def test_gpu_omitted_when_zero_and_flag_true(run_dir, repo_dir):
@@ -141,34 +158,63 @@ class TestPatchArgs:
 
 def test_get_submit_host_uses_hostname_f(monkeypatch):
     monkeypatch.setattr(
-        "subprocess.check_output",
-        lambda cmd, text=True: "submit-host.example.com\n",
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
     )
-    assert _get_submit_host() == "submit-host.example.com"
+
+    assert submit_mod._get_submit_host() == "redlradadm35840.ad.medctr.ucla.edu"
 
 
-def test_run_submit_pins_to_hostname_f(tmp_path, monkeypatch):
+def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        submit_mod,
+        "load_config",
+        lambda _: {
+            "defaults": {"scratch": str(tmp_path / "scratch"), "runs_subdir": "condor-runs"},
+            "conda": {},
+            "condor": {
+                "omit_request_gpus_when_zero": True,
+                "pin_submit_host": True,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        submit_mod,
+        "resolve_resources",
+        lambda cfg, args: {
+            "gpus": 0,
+            "cpus": 4,
+            "mem": "8G",
+            "disk": None,
+        },
+    )
+    monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
+    monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
+    monkeypatch.setattr(submit_mod, "_submit", lambda *args: None)
+    monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        submit_mod.subprocess,
+        "check_output",
+        lambda cmd, text: "REDLRADADM35840.ad.medctr.ucla.edu\n",
+    )
     monkeypatch.chdir(tmp_path)
-    submit_module = importlib.import_module("baircondor.submit")
-    monkeypatch.setattr(submit_module, "_get_submit_host", lambda: "submit-host.example.com")
-    monkeypatch.setattr(submit_module, "_submit", lambda *args: None)
 
-    class Args:
-        config = None
-        gpus = 0
-        cpus = None
-        mem = None
-        disk = None
-        jobname = None
-        scratch = str(tmp_path / "scratch")
-        runs_subdir = None
-        project = None
-        tag = None
-        conda_env = None
-        conda_base = None
-        dry_run = True
-        command = ["echo", "hello"]
+    args = SimpleNamespace(
+        config=None,
+        command=["--", "echo", "hello"],
+        jobname="job",
+        scratch=None,
+        runs_subdir=None,
+        project=None,
+        tag=None,
+        dry_run=True,
+        pin_submit_host=None,
+    )
 
-    run_submit(Args())
-    job_sub = next((tmp_path / "scratch").rglob("job.sub"))
-    assert 'requirements = (toLower(Machine) == "submit-host.example.com")' in job_sub.read_text()
+    submit_mod.run_submit(args)
+
+    job_sub_files = list((tmp_path / "scratch" / "condor-runs").glob("**/job.sub"))
+    assert len(job_sub_files) == 1
+    text = job_sub_files[0].read_text()
+    assert 'requirements = (toLower(Machine) == "redlradadm35840.ad.medctr.ucla.edu")' in text

@@ -352,8 +352,5 @@ For interactive:
 
 ---
 
-## Open Questions (optional for v1; can defer)
+## Open Questions
 
-1. Should disk requests be included (`request_disk`)?
-2. Should we include `+JobBatchName` always?
-3. Should we implement Docker mode in v1.1 (local registry, bind mounts)?
