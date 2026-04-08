@@ -117,6 +117,13 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         help="Generate run dir and files but do not call condor_submit. "
         "Useful for checking job.sub before submitting.",
     )
+    p.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        default=False,
+        help="Suppress informational output.",
+    )
 
 
 def _add_submit_parser(sub) -> None:
