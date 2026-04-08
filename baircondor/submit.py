@@ -57,10 +57,10 @@ def run_submit(args) -> Path:
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
-    _log(f"Created run dir: {run_dir}", quiet)
+    _log(f"📁 Created run dir: {run_dir}", quiet)
 
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
-    _log("Generated run.sh", quiet)
+    _log("📝 Generated run.sh", quiet)
     write_job_sub(
         run_dir,
         repo_dir,
@@ -70,9 +70,9 @@ def run_submit(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
     )
-    _log("Generated job.sub", quiet)
+    _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
-    _log("Generated meta.json", quiet)
+    _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"
     # patch job.sub: replace $(args) placeholder with actual arguments
@@ -107,11 +107,11 @@ def run_interactive(args) -> Path:
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
-    _log(f"Created run dir: {run_dir}", quiet)
+    _log(f"📁 Created run dir: {run_dir}", quiet)
 
     command = ["/bin/bash", "-i"]
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
-    _log("Generated run.sh", quiet)
+    _log("📝 Generated run.sh", quiet)
     write_job_sub(
         run_dir,
         repo_dir,
@@ -121,9 +121,9 @@ def run_interactive(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
     )
-    _log("Generated job.sub", quiet)
+    _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)
-    _log("Generated meta.json", quiet)
+    _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"
     _patch_args(job_sub, run_sh, command)
@@ -192,15 +192,15 @@ def _submit(
     job_sub: Path, dry_run: bool, run_dir: Path, repo_dir: Path, quiet: bool = False
 ) -> None:
     cmd = ["condor_submit", str(job_sub)]
-    _log(f"Repo dir : {repo_dir}", quiet)
-    _log(f"Run dir  : {run_dir}", quiet)
-    _log(f"Stdout   : {run_dir}/stdout.txt", quiet)
-    _log(f"Stderr   : {run_dir}/stderr.txt", quiet)
-    _log(f"Log      : {run_dir}/condor.log", quiet)
-    _log(f"Reproduce: condor_submit {job_sub}", quiet)
+    _log(f"🗂️  Repo dir : {repo_dir}", quiet)
+    _log(f"📂 Run dir  : {run_dir}", quiet)
+    _log(f"📄 Stdout   : {run_dir}/stdout.txt", quiet)
+    _log(f"📄 Stderr   : {run_dir}/stderr.txt", quiet)
+    _log(f"📋 Log      : {run_dir}/condor.log", quiet)
+    _log(f"🔁 Reproduce: condor_submit {job_sub}", quiet)
 
     if dry_run:
-        _log(f"[dry-run] would run: {' '.join(cmd)}", quiet)
+        _log(f"🧪 [dry-run] would run: {' '.join(cmd)}", quiet)
         return
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -209,24 +209,24 @@ def _submit(
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr)
     if result.returncode != 0:
-        _log(f"condor_submit failed (exit {result.returncode})", quiet=False)
+        _log(f"❌ condor_submit failed (exit {result.returncode})", quiet=False)
         sys.exit(result.returncode)
 
     m = re.search(r"submitted to cluster (\d+)", result.stdout)
     if m:
-        _log(f"Submitted — cluster {m.group(1)}", quiet)
-    _log("Done.", quiet)
+        _log(f"🚀 Submitted — cluster {m.group(1)}", quiet)
+    _log("✅ Done.", quiet)
 
 
 def _submit_interactive(job_sub: Path, dry_run: bool, run_dir: Path, quiet: bool = False) -> None:
     cmd = ["condor_submit", "-interactive", str(job_sub)]
-    _log(f"Run dir  : {run_dir}", quiet)
+    _log(f"📂 Run dir  : {run_dir}", quiet)
 
     if dry_run:
-        _log(f"[dry-run] would run: {' '.join(cmd)}", quiet)
+        _log(f"🧪 [dry-run] would run: {' '.join(cmd)}", quiet)
         return
 
     result = subprocess.run(cmd)
     if result.returncode != 0:
         sys.exit(result.returncode)
-    _log(f"Interactive session ended. Run dir: {run_dir}", quiet)
+    _log(f"✅ Interactive session ended. Run dir: {run_dir}", quiet)
