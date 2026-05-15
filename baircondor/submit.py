@@ -14,7 +14,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.markup import escape
 
-from .config import load_config, resolve_conda, resolve_pin_submit_host, resolve_resources
+from .config import get_user, load_config, resolve_conda, resolve_pin_submit_host, resolve_resources
 from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
@@ -48,7 +48,7 @@ def run_submit(args) -> Path:
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+    user = get_user()
     jobname = args.jobname or repo_dir.name
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -109,7 +109,7 @@ def run_interactive(args) -> Path:
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+    user = get_user()
     jobname = args.jobname or "interactive"
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -171,7 +171,7 @@ def _make_run_dir(
     if not os.access(scratch_path, os.W_OK):
         sys.exit(f"error: --scratch path is not writable: {scratch}")
 
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+    user = get_user()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     shortid = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
     dirname = f"{timestamp}_{shortid}"

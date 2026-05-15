@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from .config import CONFIG_PATH
+from .config import CONFIG_PATH, get_user
 from .submit import run_interactive, run_submit
 
 _console = Console(stderr=True)
@@ -80,41 +80,38 @@ def _cmd_setup() -> None:
 
 
 def _cmd_history(args) -> None:
-    import os
+    from concurrent.futures import ThreadPoolExecutor
 
     from rich.text import Text
 
     from .history import HISTORY_FILE, get_entries, get_job_status
 
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
     cap = 50
-    entries = get_entries(n=cap + 1, user=user, history_file=HISTORY_FILE)
+    entries = get_entries(n=cap + 1, user=get_user(), history_file=HISTORY_FILE)
 
     if not entries:
         _console.print("[dim]No submissions yet.[/dim]")
         return
 
-    overflow = len(entries) > cap
+    has_more = len(entries) > cap
     entries = entries[:cap]
-    shown = min(args.n, len(entries))
-    display = entries[:shown]
+    display = entries[: args.n]
 
-    for entry in display:
+    with ThreadPoolExecutor(max_workers=len(display)) as ex:
+        statuses = list(ex.map(lambda e: get_job_status(e.get("cluster_id")), display))
+
+    for entry, status in zip(display, statuses):
         ts = entry.get("timestamp", "")[:16].replace("T", " ")
         jobname = entry.get("jobname", "?")
-        cluster_id = entry.get("cluster_id")
         run_dir = entry.get("run_dir", "")
         gpus = entry.get("gpus", 0)
         command = entry.get("command", [])
-
-        status = get_job_status(cluster_id)
-        status_style = _status_style(status)
 
         summary = Text()
         summary.append(f"[{ts}]  ", style="dim")
         summary.append(jobname, style="bold")
         summary.append("  ")
-        summary.append(f"● {status}", style=status_style)
+        summary.append(f"● {status}", style=_status_style(status))
         _console.print(summary)
         _console.print(f"  {run_dir}", style="dim cyan")
 
@@ -126,18 +123,15 @@ def _cmd_history(args) -> None:
 
         _console.print()
 
-    if overflow or shown < len(entries):
-        total = len(entries)
-        _console.print(f"[dim]Showing {shown} of {total}+ entries. Use -n N to see more.[/dim]")
+    if has_more or len(display) < len(entries):
+        total = f"{cap}+" if has_more else str(len(entries))
+        _console.print(f"[dim]Showing {len(display)} of {total}. Use -n N to see more.[/dim]")
 
 
 def _cmd_last(args) -> None:
-    import os
-
     from .history import HISTORY_FILE, get_last_dirs
 
-    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
-    dirs = get_last_dirs(n=args.n, user=user, history_file=HISTORY_FILE)
+    dirs = get_last_dirs(n=args.n, user=get_user(), history_file=HISTORY_FILE)
     if not dirs:
         print("No submissions yet.", file=sys.stderr)
         return

@@ -39,12 +39,6 @@ def detect_gpu_memory() -> str:
         return _DEFAULT_MEM
 
 
-def detect_conda_base() -> str | None:
-    from .config import _autodetect_conda_base
-
-    return _autodetect_conda_base()
-
-
 def write_config(data: dict, config_path: Path) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     with open(config_path, "w") as f:
@@ -52,9 +46,11 @@ def write_config(data: dict, config_path: Path) -> None:
 
 
 def run_wizard(config_path: Path) -> bool:
-    """Interactive setup wizard. Returns True if user wants to proceed, False to abort."""
     from rich.console import Console
     from rich.panel import Panel
+    from rich.prompt import Prompt
+
+    from .config import _autodetect_conda_base
 
     console = Console(stderr=True)
     console.print(
@@ -65,17 +61,12 @@ def run_wizard(config_path: Path) -> bool:
         )
     )
 
-    scratch_default = "~/condor-scratch"
-    scratch = _prompt(console, "Scratch path", scratch_default)
-
-    conda_default = detect_conda_base() or ""
-    conda_base = _prompt(console, "Conda base path", conda_default)
-
-    mem_gpu_default = detect_gpu_memory()
-    mem_gpu = _prompt(console, "Memory for GPU jobs", mem_gpu_default)
-
-    mem_cpu_default = "8G"
-    mem_cpu = _prompt(console, "Memory for CPU-only jobs", mem_cpu_default)
+    scratch = Prompt.ask("Scratch path", default="~/condor-scratch", console=console)
+    conda_base = Prompt.ask(
+        "Conda base path", default=_autodetect_conda_base() or "", console=console
+    )
+    mem_gpu = Prompt.ask("Memory for GPU jobs", default=detect_gpu_memory(), console=console)
+    mem_cpu = Prompt.ask("Memory for CPU-only jobs", default="8G", console=console)
 
     cfg: dict = {
         "defaults": {
@@ -92,9 +83,3 @@ def run_wizard(config_path: Path) -> bool:
 
     answer = input("Submit now? [Y/n] ").strip().lower()
     return answer in ("", "y", "yes")
-
-
-def _prompt(console, label: str, default: str) -> str:
-    from rich.prompt import Prompt
-
-    return Prompt.ask(label, default=default, console=console)

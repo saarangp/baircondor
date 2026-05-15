@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -48,10 +49,12 @@ def get_entries(
     user: str | None = None,
     history_file: Path = HISTORY_FILE,
 ) -> list[dict]:
-    if not history_file.exists():
+    try:
+        lines = history_file.read_text().splitlines()
+    except FileNotFoundError:
         return []
-    entries = []
-    for line in history_file.read_text().splitlines():
+    entries: deque[dict] = deque(maxlen=n)
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -61,7 +64,7 @@ def get_entries(
             continue
         if user is None or entry.get("user") == user:
             entries.append(entry)
-    return list(reversed(entries))[:n]
+    return list(reversed(entries))
 
 
 def get_last_dirs(
