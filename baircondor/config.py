@@ -27,7 +27,8 @@ DEFAULTS: dict[str, Any] = {
     },
 }
 
-_CONFIG_PATH = Path.home() / ".config" / "baircondor" / "config.yaml"
+CONFIG_PATH = Path.home() / ".config" / "baircondor" / "config.yaml"
+_CONFIG_PATH = CONFIG_PATH
 
 
 def load_config(config_path: str | None = None) -> dict[str, Any]:

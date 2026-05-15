@@ -11,14 +11,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from rich.console import Console
+from rich.markup import escape
+
 from .config import load_config, resolve_conda, resolve_pin_submit_host, resolve_resources
+from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
+
+_console = Console(stderr=True)
+_PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
 
 
 def _log(msg: str, quiet: bool) -> None:
     if not quiet:
-        print(f"[baircondor] {msg}", file=sys.stderr)
+        _console.print(f"{_PREFIX} {msg}")
 
 
 def _get_submit_host() -> str:
@@ -41,6 +48,7 @@ def run_submit(args) -> Path:
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
+    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
     jobname = args.jobname or repo_dir.name
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -78,7 +86,17 @@ def run_submit(args) -> Path:
     # patch job.sub: replace $(args) placeholder with actual arguments
     _patch_args(job_sub, run_sh, command)
 
-    _submit(job_sub, args.dry_run, run_dir, repo_dir, quiet)
+    _submit(
+        job_sub,
+        args.dry_run,
+        run_dir,
+        repo_dir,
+        quiet,
+        jobname=jobname,
+        gpus=resources["gpus"],
+        command=command,
+        user=user,
+    )
 
     return run_dir
 
@@ -91,6 +109,7 @@ def run_interactive(args) -> Path:
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
+    user = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
     jobname = args.jobname or "interactive"
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -128,7 +147,15 @@ def run_interactive(args) -> Path:
     job_sub = run_dir / "job.sub"
     _patch_args(job_sub, run_sh, command)
 
-    _submit_interactive(job_sub, args.dry_run, run_dir, quiet)
+    _submit_interactive(
+        job_sub,
+        args.dry_run,
+        run_dir,
+        quiet,
+        jobname=jobname,
+        gpus=resources["gpus"],
+        user=user,
+    )
 
     return run_dir
 
@@ -189,7 +216,15 @@ def _patch_args(job_sub: Path, run_sh: Path, command: list[str]) -> None:
 
 
 def _submit(
-    job_sub: Path, dry_run: bool, run_dir: Path, repo_dir: Path, quiet: bool = False
+    job_sub: Path,
+    dry_run: bool,
+    run_dir: Path,
+    repo_dir: Path,
+    quiet: bool = False,
+    jobname: str = "",
+    gpus: int = 0,
+    command: list[str] | None = None,
+    user: str = "",
 ) -> None:
     cmd = ["condor_submit", str(job_sub)]
     _log(f"🗂️  Repo dir : {repo_dir}", quiet)
@@ -213,18 +248,31 @@ def _submit(
         sys.exit(result.returncode)
 
     m = re.search(r"submitted to cluster (\d+)", result.stdout)
-    if m:
-        _log(f"🚀 Submitted — cluster {m.group(1)}", quiet)
+    cluster_id = m.group(1) if m else None
+    if cluster_id:
+        _log(f"🚀 Submitted — cluster {cluster_id}", quiet)
     _log("✅ Done.", quiet)
 
+    append_entry(run_dir, jobname, cluster_id, gpus, command or [], user)
 
-def _submit_interactive(job_sub: Path, dry_run: bool, run_dir: Path, quiet: bool = False) -> None:
+
+def _submit_interactive(
+    job_sub: Path,
+    dry_run: bool,
+    run_dir: Path,
+    quiet: bool = False,
+    jobname: str = "",
+    gpus: int = 0,
+    user: str = "",
+) -> None:
     cmd = ["condor_submit", "-interactive", str(job_sub)]
     _log(f"📂 Run dir  : {run_dir}", quiet)
 
     if dry_run:
         _log(f"🧪 [dry-run] would run: {' '.join(cmd)}", quiet)
         return
+
+    append_entry(run_dir, jobname, None, gpus, ["/bin/bash", "-i"], user)
 
     result = subprocess.run(cmd)
     if result.returncode != 0:
