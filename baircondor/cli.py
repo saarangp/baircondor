@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
+from rich.console import Console
+
+from .config import CONFIG_PATH, get_user
 from .submit import run_interactive, run_submit
+
+_console = Console(stderr=True)
 
 
 def main() -> None:
@@ -17,13 +24,130 @@ def main() -> None:
 
     _add_submit_parser(sub)
     _add_interactive_parser(sub)
+    _add_history_parser(sub)
+    _add_last_parser(sub)
+    sub.add_parser("config", help="Print the config file path.")
+    sub.add_parser("setup", help="Re-run the setup wizard.")
 
     args = parser.parse_args()
 
     if args.subcommand == "submit":
+        _maybe_run_wizard(args)
         run_submit(args)
     elif args.subcommand == "interactive":
+        _maybe_run_wizard(args)
         run_interactive(args)
+    elif args.subcommand == "history":
+        _cmd_history(args)
+    elif args.subcommand == "last":
+        _cmd_last(args)
+    elif args.subcommand == "config":
+        print(CONFIG_PATH)
+    elif args.subcommand == "setup":
+        _cmd_setup()
+
+
+# ── setup wizard ──────────────────────────────────────────────────────────────
+
+
+def _maybe_run_wizard(args) -> None:
+    if getattr(args, "dry_run", False):
+        return
+    config_path = Path(getattr(args, "config", None) or CONFIG_PATH)
+    if config_path.exists():
+        return
+    if not sys.stdin.isatty():
+        return
+    from .setup import run_wizard
+
+    _console.print("[yellow]No config file found.[/yellow] Running first-time setup...\n")
+    proceed = run_wizard(config_path)
+    if not proceed:
+        sys.exit(0)
+
+
+def _cmd_setup() -> None:
+    from .setup import run_wizard
+
+    if CONFIG_PATH.exists():
+        answer = input(f"Config already exists at {CONFIG_PATH}. Overwrite? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            sys.exit(0)
+    run_wizard(CONFIG_PATH)
+
+
+# ── history / last ────────────────────────────────────────────────────────────
+
+
+def _cmd_history(args) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from rich.text import Text
+
+    from .history import HISTORY_FILE, get_entries, get_job_status
+
+    cap = 50
+    entries = get_entries(n=cap + 1, user=get_user(), history_file=HISTORY_FILE)
+
+    if not entries:
+        _console.print("[dim]No submissions yet.[/dim]")
+        return
+
+    has_more = len(entries) > cap
+    entries = entries[:cap]
+    display = entries[: args.n]
+
+    with ThreadPoolExecutor(max_workers=len(display)) as ex:
+        statuses = list(ex.map(lambda e: get_job_status(e.get("cluster_id")), display))
+
+    for entry, status in zip(display, statuses):
+        ts = entry.get("timestamp", "")[:16].replace("T", " ")
+        jobname = entry.get("jobname", "?")
+        run_dir = entry.get("run_dir", "")
+        gpus = entry.get("gpus", 0)
+        command = entry.get("command", [])
+
+        summary = Text()
+        summary.append(f"[{ts}]  ", style="dim")
+        summary.append(jobname, style="bold")
+        summary.append("  ")
+        summary.append(f"● {status}", style=_status_style(status))
+        _console.print(summary)
+        _console.print(f"  {run_dir}", style="dim cyan")
+
+        if args.verbose:
+            cmd_str = " ".join(command)
+            if len(cmd_str) > 60:
+                cmd_str = cmd_str[:57] + "..."
+            _console.print(f"  gpus={gpus}  cmd: {cmd_str}", style="dim")
+
+        _console.print()
+
+    if has_more or len(display) < len(entries):
+        total = f"{cap}+" if has_more else str(len(entries))
+        _console.print(f"[dim]Showing {len(display)} of {total}. Use -n N to see more.[/dim]")
+
+
+def _cmd_last(args) -> None:
+    from .history import HISTORY_FILE, get_last_dirs
+
+    dirs = get_last_dirs(n=args.n, user=get_user(), history_file=HISTORY_FILE)
+    if not dirs:
+        print("No submissions yet.", file=sys.stderr)
+        return
+    for d in dirs:
+        print(d)
+
+
+def _status_style(status: str) -> str:
+    return {
+        "idle": "yellow",
+        "running": "green",
+        "done": "dim green",
+        "failed": "red",
+        "held": "red",
+        "removed": "dim red",
+    }.get(status, "dim")
 
 
 # ── subcommand parsers ────────────────────────────────────────────────────────
@@ -137,7 +261,6 @@ def _add_submit_parser(sub) -> None:
     )
 
     def _validate(args):
-        # strip leading "--" if present
         if args.command and args.command[0] == "--":
             args.command = args.command[1:]
         if not args.command:
@@ -149,6 +272,34 @@ def _add_submit_parser(sub) -> None:
 def _add_interactive_parser(sub) -> None:
     p = sub.add_parser("interactive", help="Start an interactive condor shell.")
     _common_args(p)
+
+
+def _add_history_parser(sub) -> None:
+    p = sub.add_parser("history", help="Show recent job submissions.")
+    p.add_argument(
+        "-n",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Number of entries to show (default: 3).",
+    )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show GPUs and command in addition to the default fields.",
+    )
+
+
+def _add_last_parser(sub) -> None:
+    p = sub.add_parser("last", help="Print the path(s) of the most recent run dir(s).")
+    p.add_argument(
+        "-n",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Number of paths to print (default: 1).",
+    )
 
 
 if __name__ == "__main__":

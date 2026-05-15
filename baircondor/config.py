@@ -27,7 +27,12 @@ DEFAULTS: dict[str, Any] = {
     },
 }
 
-_CONFIG_PATH = Path.home() / ".config" / "baircondor" / "config.yaml"
+CONFIG_PATH = Path.home() / ".config" / "baircondor" / "config.yaml"
+_CONFIG_PATH = CONFIG_PATH
+
+
+def get_user() -> str:
+    return os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
 
 
 def load_config(config_path: str | None = None) -> dict[str, Any]:
