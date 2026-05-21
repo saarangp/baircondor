@@ -26,6 +26,7 @@ def main() -> None:
     _add_interactive_parser(sub)
     _add_history_parser(sub)
     _add_last_parser(sub)
+    _add_rm_parser(sub)
     sub.add_parser("config", help="Print the config file path.")
     sub.add_parser("setup", help="Re-run the setup wizard.")
 
@@ -41,6 +42,8 @@ def main() -> None:
         _cmd_history(args)
     elif args.subcommand == "last":
         _cmd_last(args)
+    elif args.subcommand == "rm":
+        _cmd_rm(args)
     elif args.subcommand == "config":
         print(CONFIG_PATH)
     elif args.subcommand == "setup":
@@ -114,6 +117,10 @@ def _cmd_history(args) -> None:
         summary.append(f"● {status}", style=_status_style(status))
         _console.print(summary)
         _console.print(f"  {run_dir}", style="dim cyan")
+
+        if args.logs:
+            _console.print(f"  stdout: {run_dir}/stdout.txt", style="dim")
+            _console.print(f"  stderr: {run_dir}/stderr.txt", style="dim")
 
         if args.verbose:
             cmd_str = " ".join(command)
@@ -289,6 +296,11 @@ def _add_history_parser(sub) -> None:
         action="store_true",
         help="Show GPUs and command in addition to the default fields.",
     )
+    p.add_argument(
+        "--logs",
+        action="store_true",
+        help="Show paths to stdout.txt and stderr.txt for each run.",
+    )
 
 
 def _add_last_parser(sub) -> None:
@@ -300,6 +312,58 @@ def _add_last_parser(sub) -> None:
         metavar="N",
         help="Number of paths to print (default: 1).",
     )
+
+
+def _add_rm_parser(sub) -> None:
+    p = sub.add_parser("rm", help="Remove HTCondor jobs (wraps condor_rm).")
+    p.add_argument(
+        "cluster_ids",
+        nargs="*",
+        metavar="CLUSTER_ID",
+        help="Cluster ID(s) to remove. If omitted, removes the most recent submitted job.",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be removed without calling condor_rm.",
+    )
+
+
+def _cmd_rm(args) -> None:
+    import subprocess
+
+    from .history import HISTORY_FILE, get_entries
+
+    cluster_ids = list(args.cluster_ids)
+    if not cluster_ids:
+        entries = get_entries(n=1, user=get_user(), history_file=HISTORY_FILE)
+        if not entries:
+            _console.print("[red]No submissions found in history.[/red]", highlight=False)
+            sys.exit(1)
+        entry = entries[0]
+        cluster_id = entry.get("cluster_id")
+        if not cluster_id:
+            _console.print(
+                "[red]Most recent job has no cluster ID (was it a dry run?).[/red]",
+                highlight=False,
+            )
+            sys.exit(1)
+        jobname = entry.get("jobname", "?")
+        _console.print(f"Removing cluster [bold]{cluster_id}[/bold] ({jobname})")
+        cluster_ids = [cluster_id]
+
+    cmd = ["condor_rm"] + cluster_ids
+    if args.dry_run:
+        _console.print(f"[dim][dry-run] would run: {' '.join(cmd)}[/dim]")
+        return
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
