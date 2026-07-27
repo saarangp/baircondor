@@ -226,7 +226,7 @@ def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
     monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
-    monkeypatch.setattr(submit_mod, "_submit", lambda *args: None)
+    monkeypatch.setattr(submit_mod, "_submit", lambda *args, **kwargs: None)
     monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         submit_mod.subprocess,
@@ -275,7 +275,7 @@ def test_run_submit_machine_overrides_submit_host_pin(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
     monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
-    monkeypatch.setattr(submit_mod, "_submit", lambda *args: None)
+    monkeypatch.setattr(submit_mod, "_submit", lambda *args, **kwargs: None)
     monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         submit_mod.subprocess,
