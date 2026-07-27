@@ -21,6 +21,7 @@ DEFAULTS: dict[str, Any] = {
     "condor": {
         "omit_request_gpus_when_zero": True,
         "pin_submit_host": True,
+        "machine": None,
     },
     "conda": {
         "conda_base": None,
@@ -84,6 +85,14 @@ def resolve_pin_submit_host(cfg: dict, args) -> bool:
     if pin_submit_host is None:
         return bool(cfg["condor"]["pin_submit_host"])
     return pin_submit_host
+
+
+def resolve_machine(cfg: dict, args) -> str | None:
+    """Resolve the explicit --machine target: CLI flag wins over config default."""
+    machine = getattr(args, "machine", None)
+    if machine is None:
+        return cfg["condor"].get("machine")
+    return machine
 
 
 def _autodetect_conda_base() -> str | None:

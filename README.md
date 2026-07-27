@@ -104,6 +104,11 @@ baircondor submit --gpus 1 --tag smoke-test -- python examples/gpu_test.py
 baircondor submit --gpus 1 --project eegfm --jobname pretrain -- python train.py
 ```
 
+**Target a specific machine** (the host that holds your data/cache, regardless of where you submit from):
+```bash
+baircondor submit --machine REDLRADADM35840 --gpus 1 -- python train.py
+```
+
 </details>
 
 <details>
@@ -159,6 +164,7 @@ All flags work for both `submit` and `interactive`:
 | `--conda-base PATH` | auto-detected | Path to conda installation |
 | `--pin-submit-host` | `true` | Pin job to this server |
 | `--no-pin-submit-host` | | Let condor schedule on any eligible host |
+| `--machine NAME` | *(omitted)* | Pin to a specific host by name; wins over submit-host pinning |
 | `--dry-run` | `false` | Generate files only; don't submit |
 | `--config PATH` | `~/.config/baircondor/config.yaml` | Config file override |
 
@@ -181,6 +187,7 @@ defaults:
 condor:
   omit_request_gpus_when_zero: true
   pin_submit_host: true
+  machine: null    # pin to a specific host by name; overrides pin_submit_host
 
 conda:
   conda_base: null    # auto-detected if omitted

@@ -14,7 +14,14 @@ from pathlib import Path
 from rich.console import Console
 from rich.markup import escape
 
-from .config import get_user, load_config, resolve_conda, resolve_pin_submit_host, resolve_resources
+from .config import (
+    get_user,
+    load_config,
+    resolve_conda,
+    resolve_machine,
+    resolve_pin_submit_host,
+    resolve_resources,
+)
 from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
@@ -38,6 +45,7 @@ def run_submit(args) -> Path:
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
     pin_submit_host = resolve_pin_submit_host(cfg, args)
+    machine = resolve_machine(cfg, args)
 
     # strip leading "--" separator that argparse REMAINDER captures
     command = args.command
@@ -77,6 +85,7 @@ def run_submit(args) -> Path:
         submit_host,
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
+        machine=machine,
     )
     _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
@@ -106,6 +115,7 @@ def run_interactive(args) -> Path:
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
     pin_submit_host = resolve_pin_submit_host(cfg, args)
+    machine = resolve_machine(cfg, args)
 
     repo_dir = Path.cwd()
     submit_host = _get_submit_host()
@@ -139,6 +149,7 @@ def run_interactive(args) -> Path:
         submit_host,
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
+        machine=machine,
     )
     _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)

@@ -222,11 +222,22 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         "Auto-detected if omitted.",
     )
     p.add_argument(
+        "--machine",
+        metavar="NAME",
+        default=None,
+        help="Pin the job to a specific execute host by name (e.g. REDLRADADM35840), "
+        "regardless of where you submit from. Matches machines whose name starts with "
+        "NAME, case-insensitively. Takes priority over --pin-submit-host / "
+        "--no-pin-submit-host (a config condor.machine default likewise wins over "
+        "--no-pin-submit-host).",
+    )
+    p.add_argument(
         "--pin-submit-host",
         dest="pin_submit_host",
         action="store_true",
         default=None,
-        help="Pin job to the server you submitted from (default: on).",
+        help="Pin job to the server you submitted from (default: on). "
+        "Ignored when --machine is given.",
     )
     p.add_argument(
         "--no-pin-submit-host",
