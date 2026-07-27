@@ -90,8 +90,13 @@ class TestCondorConfigDefaults:
             "conda_env",
             "conda_base",
             "config",
+            "machine",
         ):
             assert getattr(cfg, field) is None, f"{field} should default to None"
+
+    def test_machine_field_accepted(self):
+        cfg = CondorConfig(machine="REDLRADADM35840")
+        assert cfg.machine == "REDLRADADM35840"
 
     def test_dry_run_default_false(self):
         assert CondorConfig().dry_run is False

@@ -96,6 +96,11 @@ baircondor submit --gpus 1 --project eegfm --jobname pretrain -- python train.py
 baircondor submit --no-pin-submit-host --gpus 1 -- python examples/gpu_test.py
 ```
 
+**Target a specific machine** (e.g. the host that holds your data/cache, regardless of where you submit from):
+```bash
+baircondor submit --machine REDLRADADM35840 --gpus 1 -- python train.py
+```
+
 ## What it does
 
 For every submission, baircondor creates a timestamped run directory:
@@ -117,7 +122,7 @@ With the default config this looks like:
 
 **Key behaviors:**
 - `initialdir` in `job.sub` is set to your current working directory (the repo), so relative paths in your scripts work exactly like they do interactively.
-- `requirements` pins jobs to the submit host by default. Use `--no-pin-submit-host` or set `condor.pin_submit_host: false` in your config to let condor schedule across hosts.
+- `requirements` pins jobs to the submit host by default. Use `--no-pin-submit-host` or set `condor.pin_submit_host: false` in your config to let condor schedule across hosts. Pass `--machine NAME` to pin to a specific host by name instead (matches names starting with `NAME`, case-insensitively); it takes priority over the submit-host pin.
 - `run.sh` sets `set -euo pipefail`, exports `BAIRCONDOR_*` env vars, optionally activates conda, then `exec`s your command.
 
 ## Environment variables available in your job
@@ -161,6 +166,7 @@ All options work for both `submit` and `interactive`:
 | `--conda-base PATH` | auto-detected | Path to conda installation |
 | `--pin-submit-host` | `true` (from config) | Pin job to this server |
 | `--no-pin-submit-host` | | Let condor schedule on any eligible host |
+| `--machine NAME` | *(omitted)* | Pin to a specific host by name; wins over submit-host pinning |
 | `--dry-run` | `false` | Generate files only; don't call `condor_submit` |
 | `--config PATH` | `~/.config/baircondor/config.yaml` | Config file override |
 
@@ -186,6 +192,7 @@ defaults:
 condor:
   omit_request_gpus_when_zero: true   # don't emit request_gpus when --gpus 0
   pin_submit_host: true               # pin jobs to the server you submitted from
+  machine: null                       # pin to a specific host by name; overrides pin_submit_host
 
 conda:
   conda_base: null               # path to conda install; auto-detected if omitted
@@ -375,7 +382,7 @@ pre-commit install
 - `--dry-run` mode (no condor needed)
 - Conda env activation
 - Git metadata capture in `meta.json`
-- Host pinning toggle (`--pin-submit-host` / `--no-pin-submit-host`)
+- Host pinning: submit-host toggle (`--pin-submit-host` / `--no-pin-submit-host`) or a named target (`--machine NAME`)
 
 **What needs testing on real clusters:**
 - End-to-end `condor_submit` on each lab server (GPU jobs, CPU-only jobs, interactive sessions)

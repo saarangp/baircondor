@@ -26,6 +26,7 @@ defaults:
 condor:
   # omit_request_gpus_when_zero: true # don't emit request_gpus in job.sub when --gpus 0
   # pin_submit_host: true             # pin jobs to the server you submitted from
+  # machine: null                     # pin to a specific host by name (overrides pin_submit_host)
 
 conda:
   # conda_base: null                  # path to conda install (auto-detected if omitted)

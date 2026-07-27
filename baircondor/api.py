@@ -39,6 +39,7 @@ class CondorConfig(BaseModel):
     conda_env: str | None = None
     conda_base: str | None = None
     config: str | None = None
+    machine: str | None = None
     dry_run: bool = False
 
 

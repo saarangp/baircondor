@@ -14,6 +14,7 @@ def write_job_sub(
     submit_host: str,
     pin_submit_host: bool,
     omit_gpus_when_zero: bool = True,
+    machine: str | None = None,
 ) -> Path:
     path = run_dir / "job.sub"
     path.write_text(
@@ -25,6 +26,7 @@ def write_job_sub(
             submit_host,
             pin_submit_host,
             omit_gpus_when_zero,
+            machine,
         )
     )
     return path
@@ -48,6 +50,7 @@ def _render_job_sub(
     submit_host: str,
     pin_submit_host: bool,
     omit_gpus_when_zero: bool,
+    machine: str | None,
 ) -> str:
     run_dir / "run.sh"
     lines = [
@@ -63,7 +66,12 @@ def _render_job_sub(
         f"request_memory = {resources['mem']}",
     ]
 
-    if pin_submit_host:
+    # An explicit --machine target wins over the default submit-host pin (and over
+    # --no-pin-submit-host). The prefix-anchored, case-insensitive regexp tolerates
+    # short-name vs FQDN (e.g. "^redlradadm35840" matches "redlradadm35840.ad...").
+    if machine:
+        lines.append(f'requirements = regexp("^{machine}", Machine, "i")')
+    elif pin_submit_host:
         lines.append(f'requirements = (toLower(Machine) == "{submit_host.lower()}")')
 
     gpus = resources["gpus"]

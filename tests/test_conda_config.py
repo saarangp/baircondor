@@ -3,7 +3,7 @@
 import subprocess
 from types import SimpleNamespace
 
-from baircondor.config import resolve_conda, resolve_pin_submit_host
+from baircondor.config import resolve_conda, resolve_machine, resolve_pin_submit_host
 
 
 def _args(conda_env=None, conda_base=None):
@@ -69,3 +69,24 @@ def test_pin_submit_host_cli_override():
     args = _args()
     args.pin_submit_host = False
     assert resolve_pin_submit_host(cfg, args) is False
+
+
+def test_machine_default_none():
+    cfg = {"condor": {"machine": None}}
+    args = _args()
+    args.machine = None
+    assert resolve_machine(cfg, args) is None
+
+
+def test_machine_from_config_default():
+    cfg = {"condor": {"machine": "SOMEHOST"}}
+    args = _args()
+    args.machine = None
+    assert resolve_machine(cfg, args) == "SOMEHOST"
+
+
+def test_machine_cli_overrides_config():
+    cfg = {"condor": {"machine": "SOMEHOST"}}
+    args = _args()
+    args.machine = "CLIHOST"
+    assert resolve_machine(cfg, args) == "CLIHOST"
