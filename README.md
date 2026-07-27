@@ -106,8 +106,16 @@ baircondor submit --gpus 1 --project eegfm --jobname pretrain -- python train.py
 
 **Target a specific machine** (the host that holds your data/cache, regardless of where you submit from):
 ```bash
-baircondor submit --machine REDLRADADM35840 --gpus 1 -- python train.py
+baircondor submit --machine REDLRADADM35839 --gpus 1 -- python train.py
 ```
+
+> **Cross-machine runs need a shared filesystem.** The job's run dir and cwd must resolve to the
+> same absolute path on both the submit and target hosts. On the shared NFS namespace, pass an
+> explicit shared path for `--scratch` (e.g. `/REDLRADADM35839/home/$USER/condor-scratch`) and
+> `cd` into one before submitting — the default `~/condor-scratch` and node-local `/raid` are not
+> visible on other hosts and the job will hold with a "No such file … stdout.txt" error. Hosts
+> that don't export their filesystem (e.g. PHI-restricted nodes) aren't reachable this way and
+> would need condor file transfer, which baircondor doesn't do yet.
 
 </details>
 
