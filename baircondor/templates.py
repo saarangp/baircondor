@@ -123,8 +123,18 @@ def _render_run_sh(
             ' set --conda-base" >&2',
             "  exit 1",
             "fi",
+            f'ENV_NAME="{conda["env"]}"',
+            # fail fast with the available envs instead of conda's generic activate error
+            # (path-style envs with "/" are activated as-is and skip the existence check)
+            'if [[ "$ENV_NAME" != */* && "$ENV_NAME" != base'
+            ' && ! -d "$CONDA_BASE/envs/$ENV_NAME" && ! -d "$HOME/.conda/envs/$ENV_NAME" ]]; then',
+            "  echo \"baircondor: conda env '$ENV_NAME' not found on $(hostname).\" >&2",
+            '  echo "baircondor: available envs: base'
+            " $(ls -1 \"$CONDA_BASE/envs\" 2>/dev/null | tr '\\n' ' ')\" >&2",
+            "  exit 1",
+            "fi",
             'source "$CONDA_BASE/etc/profile.d/conda.sh"',
-            f'conda activate "{conda["env"]}"',
+            'conda activate "$ENV_NAME"',
             "",
         ]
 

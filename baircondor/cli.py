@@ -24,6 +24,7 @@ def main() -> None:
 
     _add_submit_parser(sub)
     _add_interactive_parser(sub)
+    _add_preflight_parser(sub)
     _add_history_parser(sub)
     _add_last_parser(sub)
     sub.add_parser("config", help="Print the config file path.")
@@ -37,6 +38,10 @@ def main() -> None:
     elif args.subcommand == "interactive":
         _maybe_run_wizard(args)
         _run_clean(run_interactive, args)
+    elif args.subcommand == "preflight":
+        from .preflight import run_preflight
+
+        _run_clean(run_preflight, args)
     elif args.subcommand == "history":
         _cmd_history(args)
     elif args.subcommand == "last":
@@ -300,6 +305,45 @@ def _add_submit_parser(sub) -> None:
 def _add_interactive_parser(sub) -> None:
     p = sub.add_parser("interactive", help="Start an interactive condor shell.")
     _common_args(p)
+
+
+def _add_preflight_parser(sub) -> None:
+    p = sub.add_parser(
+        "preflight",
+        help="Run a tiny CPU-only job on a machine to report its conda envs "
+        "and how your cwd resolves there (git commit, existence).",
+    )
+    p.add_argument(
+        "--machine",
+        required=True,
+        metavar="NAME",
+        help="Machine to inspect (e.g. REDLRADADM35840). Same matching as submit --machine.",
+    )
+    p.add_argument(
+        "--scratch",
+        default=None,
+        metavar="PATH",
+        help="Root for the preflight's run dir; must be a shared /HOSTNAME/... path "
+        "for cross-machine checks (same rule as submit).",
+    )
+    p.add_argument(
+        "--runs-subdir",
+        default=None,
+        metavar="NAME",
+        help="Subdirectory under scratch for all runs (default: condor-runs).",
+    )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        metavar="SECS",
+        help="Max seconds to wait for the preflight job to finish (default: 300).",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Generate the preflight job files but do not submit.",
+    )
 
 
 def _add_history_parser(sub) -> None:

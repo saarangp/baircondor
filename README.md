@@ -18,6 +18,7 @@ baircondor submit --gpus N -- your command   # submit a GPU batch job
 baircondor interactive --gpus 1              # interactive shell with a GPU
 baircondor history                           # recent submissions
 baircondor last                              # path to most recent run dir (shell-composable)
+baircondor preflight --machine NAME          # check conda envs + repo state on another machine
 ```
 
 That's it for most use cases. Everything else is optional.
@@ -130,6 +131,24 @@ interpreted from its point of view:
 | Your command, GPUs, data reads | Execute on the `--machine` host |
 | Repo cwd (`initialdir`) and `--scratch` | Captured at submit time; must be the same absolute path on both hosts (shared NFS, e.g. `/REDLRADADM35839/home/$USER/...`) |
 | `--conda-base` (or auto-detection) | Resolved on the execute host — point it at that machine's conda install |
+
+Submitting with a machine-local cwd or `--scratch` (`/home/...`, `/raid/...`, `~`) while
+`--machine` targets a different host prints a warning, since those paths resolve to the
+*target's* own disk and can silently run a stale clone.
+
+**Checking a machine before you submit.** The exec nodes aren't SSH-able, so
+`baircondor preflight` runs a tiny CPU-only condor job on the target and reports back:
+
+```bash
+cd /REDLRADADM35839/home/$USER/myrepo
+baircondor preflight --machine REDLRADADM35840 --scratch /REDLRADADM35839/home/$USER/condor-scratch
+```
+
+It prints the machine's conda base and env list, whether your cwd exists there, and the
+git commit it sees at that path (with a loud warning if it differs from your local
+checkout). Results are cached under `~/.local/share/baircondor/`. Jobs that reach a
+missing conda env anyway fail immediately with the list of envs that do exist on that
+host, visible in the stderr tab of `baircondor history`.
 
 </details>
 

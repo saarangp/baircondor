@@ -70,6 +70,7 @@ def run_submit(args) -> Path:
     )
 
     _validate_conda(conda, machine)
+    _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -133,6 +134,7 @@ def run_interactive(args) -> Path:
     )
 
     _validate_conda(conda, machine)
+    _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -194,6 +196,36 @@ def _make_run_dir(
         parts.append(project)
     parts += [jobname, dirname]
     return Path(*parts)
+
+
+def unshared_path_warnings(
+    machine: str | None, submit_host: str, paths: dict[str, str]
+) -> list[str]:
+    """Flag machine-local paths (/home, /raid, $HOME) for cross-machine runs.
+
+    Under --machine the job resolves every path on the target host, so a /home or
+    /raid path silently points at the target's own disk — a stale clone there runs
+    instead of your code. Shared paths look like /HOSTNAME/{home,raid}/...
+    """
+    if not machine or submit_host.lower().startswith(machine.lower()):
+        return []
+    local_prefixes = ("/home/", "/raid/", str(Path.home()) + "/")
+    warnings = []
+    for label, path in paths.items():
+        p = str(path)
+        if p.startswith(local_prefixes) or p in ("/home", "/raid", str(Path.home())):
+            top = "/" + p.lstrip("/").split("/", 1)[0]
+            warnings.append(
+                f"{label} '{p}' is machine-local; on {machine} it resolves to that host's "
+                f"own {top}, so the job may run a stale copy or hold. "
+                f"Use a shared /HOSTNAME/... path."
+            )
+    return warnings
+
+
+def _warn_unshared_paths(machine: str | None, submit_host: str, paths: dict[str, str]) -> None:
+    for w in unshared_path_warnings(machine, submit_host, paths):
+        _console.print(f"[yellow]⚠ {escape(w)}[/yellow]")
 
 
 def _validate_conda(conda: dict, machine: str | None) -> None:

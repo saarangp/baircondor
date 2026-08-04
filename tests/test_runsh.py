@@ -32,7 +32,8 @@ def test_explicit_base_used_verbatim(run_dir, repo_dir):
     # the base is seeded non-empty, so the runtime fallback is skipped on the exec host
     assert 'CONDA_BASE="/opt/conda"' in text
     assert 'source "$CONDA_BASE/etc/profile.d/conda.sh"' in text
-    assert 'conda activate "train"' in text
+    assert 'ENV_NAME="train"' in text
+    assert 'conda activate "$ENV_NAME"' in text
 
 
 def test_no_base_resolves_at_runtime(run_dir, repo_dir):
@@ -43,7 +44,24 @@ def test_no_base_resolves_at_runtime(run_dir, repo_dir):
     assert "$HOME/anaconda3" in text
     assert "$HOME/miniconda3" in text
     assert "$HOME/miniforge3" in text
-    assert 'conda activate "train"' in text
+    assert 'ENV_NAME="train"' in text
+    assert 'conda activate "$ENV_NAME"' in text
+
+
+def test_missing_env_fails_fast_with_available_list(run_dir, repo_dir):
+    text = _run_sh_text(run_dir, repo_dir, {"env": "train", "conda_base": None})
+    # the env-existence check runs before conda activate and lists what IS there
+    assert '"$CONDA_BASE/envs/$ENV_NAME"' in text
+    assert '"$HOME/.conda/envs/$ENV_NAME"' in text
+    assert "not found on $(hostname)" in text
+    assert "available envs: base" in text
+    assert text.index("not found on") < text.index("conda activate")
+
+
+def test_path_style_env_skips_existence_check(run_dir, repo_dir):
+    # envs given as a path (containing "/") are activated as-is
+    text = _run_sh_text(run_dir, repo_dir, {"env": "/opt/envs/train", "conda_base": None})
+    assert '"$ENV_NAME" != */*' in text
 
 
 def test_no_base_errors_when_conda_missing(run_dir, repo_dir):
