@@ -287,6 +287,13 @@ def _add_submit_parser(sub) -> None:
     p = sub.add_parser("submit", help="Submit a non-interactive batch job.")
     _common_args(p)
     p.add_argument(
+        "--check",
+        action="store_true",
+        help="Run a preflight job on the --machine target first and abort before submitting "
+        "if the conda env is missing there, the cwd doesn't resolve, or its git commit "
+        "differs from your local checkout.",
+    )
+    p.add_argument(
         "command",
         nargs=argparse.REMAINDER,
         metavar="-- COMMAND...",

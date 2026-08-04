@@ -110,6 +110,88 @@ def run_preflight(args) -> None:
 
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
+    if getattr(args, "dry_run", False):
+        run_dir = _write_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg)
+        job_sub = run_dir / "job.sub"
+        _console.print(f"{_PREFIX} 🧪 {escape('[dry-run]')} would run: condor_submit {job_sub}")
+        return
+
+    timeout = getattr(args, "timeout", 300)
+    report = run_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg, timeout)
+    _print_report(report, machine, repo_dir)
+
+
+def run_live_check(
+    machine: str,
+    scratch: str,
+    runs_subdir: str,
+    repo_dir: Path,
+    submit_host: str,
+    cfg: dict,
+    conda_env: str | None,
+    timeout: int = 300,
+) -> None:
+    """Run the check job for submit --check and abort (sys.exit) on any problem."""
+    report = run_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg, timeout)
+    problems = check_problems(report, conda_env, _local_git_commit(repo_dir))
+    if problems:
+        _print_report(report, machine, repo_dir)
+        details = "\n".join(f"  - {p}" for p in problems)
+        sys.exit(f"error: --check failed on {machine}:\n{details}")
+    checked = ["cwd resolves"]
+    if conda_env and "/" not in conda_env:
+        checked.insert(0, f"env '{conda_env}' exists")
+    if report.get("git_commit"):
+        checked.append("code matches local")
+    _console.print(f"{_PREFIX} ✅ Check passed on {escape(machine)}: {escape(', '.join(checked))}")
+
+
+def check_problems(report: dict, conda_env: str | None, local_commit: str | None) -> list[str]:
+    """Evaluate a preflight report against what the submission needs."""
+    problems = []
+    if not report.get("repo_exists"):
+        problems.append("the cwd does not exist on the target; use a shared /HOSTNAME/... path")
+    if conda_env and "/" not in conda_env:  # path-style envs are activated as-is
+        if not report.get("conda_base"):
+            problems.append("no conda installation found on the target")
+        elif conda_env not in report.get("envs", []):
+            available = ", ".join(report.get("envs", [])) or "(none)"
+            problems.append(f"conda env '{conda_env}' not found (available: {available})")
+    commit = report.get("git_commit")
+    if commit and local_commit and commit != local_commit:
+        problems.append(
+            f"the target sees commit {commit} but your local checkout is at {local_commit} "
+            "(the path likely points at a separate machine-local clone)"
+        )
+    return problems
+
+
+def cached_env_warning(machine: str, conda_env: str | None) -> str | None:
+    """Soft, non-blocking staleness hint from the last preflight of this machine."""
+    if not conda_env or "/" in conda_env:
+        return None
+    try:
+        data = json.loads(cache_file(machine).read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    envs = data.get("envs") or []
+    if envs and conda_env not in envs:
+        return (
+            f"conda env '{conda_env}' was not in {machine}'s env list as of "
+            f"{data.get('timestamp', '?')} — submitting anyway "
+            "(the job will fail fast if it's really missing)"
+        )
+    return None
+
+
+def _write_check_job(
+    machine: str,
+    scratch: str,
+    runs_subdir: str,
+    repo_dir: Path,
+    submit_host: str,
+    cfg: dict,
+) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = Path(scratch) / runs_subdir / get_user() / ".preflight" / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -126,12 +208,22 @@ def run_preflight(args) -> None:
         omit_gpus_when_zero=cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
     )
-    job_sub = run_dir / "job.sub"
-    _patch_args(job_sub, preflight_sh, [str(repo_dir)])
+    _patch_args(run_dir / "job.sub", preflight_sh, [str(repo_dir)])
+    return run_dir
 
-    if getattr(args, "dry_run", False):
-        _console.print(f"{_PREFIX} 🧪 {escape('[dry-run]')} would run: condor_submit {job_sub}")
-        return
+
+def run_check_job(
+    machine: str,
+    scratch: str,
+    runs_subdir: str,
+    repo_dir: Path,
+    submit_host: str,
+    cfg: dict,
+    timeout: int = 300,
+) -> dict:
+    """Submit the report job to `machine`, wait for it, parse and cache the result."""
+    run_dir = _write_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg)
+    job_sub = run_dir / "job.sub"
 
     result = subprocess.run(["condor_submit", str(job_sub)], capture_output=True, text=True)
     if result.returncode != 0:
@@ -140,7 +232,6 @@ def run_preflight(args) -> None:
     m = re.search(r"submitted to cluster (\d+)", result.stdout)
     cluster_id = m.group(1) if m else None
 
-    timeout = getattr(args, "timeout", 300)
     _console.print(
         f"{_PREFIX} ⏳ Waiting for preflight job on {escape(machine)} "
         f"(cluster {cluster_id}, timeout {timeout}s)..."
@@ -159,8 +250,8 @@ def run_preflight(args) -> None:
         )
 
     report = parse_report((run_dir / "stdout.txt").read_text())
-    _print_report(report, machine, repo_dir)
     _write_cache(machine, report)
+    return report
 
 
 def _print_report(report: dict, machine: str, repo_dir: Path) -> None:

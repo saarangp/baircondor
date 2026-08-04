@@ -146,9 +146,18 @@ baircondor preflight --machine REDLRADADM35840 --scratch /REDLRADADM35839/home/$
 
 It prints the machine's conda base and env list, whether your cwd exists there, and the
 git commit it sees at that path (with a loud warning if it differs from your local
-checkout). Results are cached under `~/.local/share/baircondor/`. Jobs that reach a
-missing conda env anyway fail immediately with the list of envs that do exist on that
-host, visible in the stderr tab of `baircondor history`.
+checkout).
+
+You don't need to run it before every submit — three layers cover you:
+
+- **Always on:** jobs that reach a missing conda env fail immediately with the list of
+  envs that do exist on that host, visible in the stderr tab of `baircondor history`.
+- **`submit --check`:** runs the preflight job first and only submits if the env exists,
+  the cwd resolves, and the git commit matches your local checkout. One command, a few
+  extra seconds.
+- **Cache hint:** preflight results are cached under `~/.local/share/baircondor/`; if a
+  later submit names an env that wasn't in the machine's cached list, you get a soft
+  "as of <time>" warning but the submission proceeds (the cache never blocks anything).
 
 </details>
 

@@ -73,6 +73,25 @@ def run_submit(args) -> Path:
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
     quiet = getattr(args, "quiet", False)
+
+    if getattr(args, "check", False):
+        if not machine:
+            sys.exit("error: --check requires --machine (or a condor.machine config default)")
+        if args.dry_run:
+            _log(f"🧪 [dry-run] would run a preflight check on {machine} first", quiet)
+        else:
+            from .preflight import run_live_check
+
+            run_live_check(
+                machine, scratch, runs_subdir, repo_dir, submit_host, cfg, conda.get("env")
+            )
+    elif machine:
+        from .preflight import cached_env_warning
+
+        warning = cached_env_warning(machine, conda.get("env"))
+        if warning:
+            _console.print(f"[yellow]⚠ {escape(warning)}[/yellow]")
+
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
 

@@ -1,9 +1,11 @@
 """Tests for the preflight command and the unshared-path guard."""
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from baircondor.preflight import parse_report, run_preflight
+import baircondor.preflight as preflight_mod
+from baircondor.preflight import cached_env_warning, check_problems, parse_report, run_preflight
 from baircondor.submit import unshared_path_warnings
 
 SAMPLE_REPORT = """\
@@ -80,6 +82,69 @@ def test_preflight_dry_run_generates_job(tmp_path, monkeypatch):
     assert "conda info --base" in script
     assert "envs_begin" in script
     assert "git rev-parse --short HEAD" in script
+
+
+# ── check_problems (submit --check gate) ──────────────────────────────────────
+
+GOOD_REPORT = {
+    "conda_base": "/home/u/anaconda3",
+    "envs": ["base", "eeg2025"],
+    "repo_exists": True,
+    "git_commit": "abc1234",
+}
+
+
+def test_check_passes_when_everything_matches():
+    assert check_problems(GOOD_REPORT, "eeg2025", "abc1234") == []
+
+
+def test_check_flags_missing_env():
+    problems = check_problems(GOOD_REPORT, "typo-env", "abc1234")
+    assert len(problems) == 1
+    assert "typo-env" in problems[0]
+    assert "base, eeg2025" in problems[0]
+
+
+def test_check_flags_commit_mismatch():
+    problems = check_problems(GOOD_REPORT, "eeg2025", "fff9999")
+    assert len(problems) == 1
+    assert "abc1234" in problems[0]
+    assert "fff9999" in problems[0]
+
+
+def test_check_flags_missing_repo_and_conda():
+    report = {"conda_base": None, "envs": [], "repo_exists": False, "git_commit": None}
+    problems = check_problems(report, "eeg2025", "abc1234")
+    assert len(problems) == 2  # missing cwd + no conda
+
+
+def test_check_skips_path_style_env_and_no_env():
+    assert check_problems(GOOD_REPORT, "/opt/envs/x", "abc1234") == []
+    assert check_problems(GOOD_REPORT, None, "abc1234") == []
+
+
+# ── cached_env_warning (soft, non-blocking hint) ──────────────────────────────
+
+
+def _write_cache_file(tmp_path, monkeypatch, envs):
+    monkeypatch.setattr(preflight_mod, "HISTORY_FILE", tmp_path / "history.jsonl")
+    cache = tmp_path / "preflight-REDLRADADM35840.json"
+    cache.write_text(json.dumps({"timestamp": "2026-08-04T10:00:00", "envs": envs}))
+
+
+def test_cached_warning_when_env_absent(tmp_path, monkeypatch):
+    _write_cache_file(tmp_path, monkeypatch, ["base", "eegfm"])
+    warning = cached_env_warning("REDLRADADM35840", "eeg2025")
+    assert "eeg2025" in warning
+    assert "2026-08-04T10:00:00" in warning
+    assert "submitting anyway" in warning
+
+
+def test_no_cached_warning_when_env_present_or_no_cache(tmp_path, monkeypatch):
+    _write_cache_file(tmp_path, monkeypatch, ["base", "eeg2025"])
+    assert cached_env_warning("REDLRADADM35840", "eeg2025") is None
+    assert cached_env_warning("NOSUCHMACHINE", "eeg2025") is None  # no cache file
+    assert cached_env_warning("REDLRADADM35840", None) is None
 
 
 # ── unshared-path guard ───────────────────────────────────────────────────────
