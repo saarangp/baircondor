@@ -47,7 +47,7 @@ def history_env(tmp_path, monkeypatch):
     return entry
 
 
-def _history_args(plain=False, n=3, verbose=False):
+def _history_args(plain=False, n=None, verbose=False):
     return SimpleNamespace(plain=plain, n=n, verbose=verbose)
 
 
@@ -80,3 +80,31 @@ def test_history_tty_launches_tui(history_env, monkeypatch):
     _cmd_history(_history_args(plain=False))
     assert launched["ran"]
     assert launched["entries"][0]["jobname"] == "myjob"
+
+
+def test_history_tui_shows_five_entries_by_default(history_env, monkeypatch):
+    import json as _json
+
+    import baircondor.history as history_mod
+
+    entries = [dict(history_env, jobname=f"job{i}") for i in range(8)]
+    history_mod.HISTORY_FILE.write_text("\n".join(_json.dumps(e) for e in entries) + "\n")
+
+    launched = {}
+
+    class FakeApp:
+        def __init__(self, entries):
+            launched["entries"] = entries
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr("baircondor.tui.RunBrowserApp", FakeApp)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+
+    _cmd_history(_history_args(plain=False))
+    assert len(launched["entries"]) == 5
+
+    _cmd_history(_history_args(plain=False, n=2))
+    assert len(launched["entries"]) == 2

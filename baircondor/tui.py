@@ -174,33 +174,7 @@ class RunDetailScreen(Screen):
         self.notify("run dir path copied to clipboard")
 
     def action_kill(self) -> None:
-        cluster_id = self._entry.get("cluster_id")
-        if not cluster_id:
-            self.notify("no cluster id recorded for this run", severity="warning")
-            return
-        if self._status not in _ACTIVE_STATUSES:
-            self.notify(f"job is already {self._status}", severity="warning")
-            return
-
-        def _on_confirm(confirmed: bool | None) -> None:
-            if confirmed:
-                self._kill(str(cluster_id))
-
-        self.app.push_screen(
-            ConfirmKill(self._entry.get("jobname", "?"), str(cluster_id)), _on_confirm
-        )
-
-    @work(thread=True, group="kill")
-    def _kill(self, cluster_id: str) -> None:
-        try:
-            result = subprocess.run(
-                ["condor_rm", cluster_id], capture_output=True, text=True, timeout=10
-            )
-            ok = result.returncode == 0
-            msg = (result.stdout or result.stderr).strip() or f"condor_rm {cluster_id}"
-        except (subprocess.TimeoutExpired, OSError) as e:
-            ok, msg = False, f"condor_rm failed: {e}"
-        self.app.call_from_thread(self.notify, msg, severity="information" if ok else "error")
+        self.app.confirm_kill(self._entry, self._status)
 
 
 class RunBrowserApp(App):
@@ -210,6 +184,7 @@ class RunBrowserApp(App):
     BINDINGS = [
         Binding("q,escape", "quit", "quit"),
         Binding("r", "refresh_statuses", "refresh"),
+        Binding("k", "kill", "kill job"),
     ]
 
     def __init__(self, entries: list[dict]) -> None:
@@ -263,3 +238,40 @@ class RunBrowserApp(App):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         index = int(event.row_key.value)
         self.push_screen(RunDetailScreen(self._entries[index], self._statuses[index]))
+
+    def action_kill(self) -> None:
+        table = self.query_one(DataTable)
+        if not self._entries or table.cursor_row is None:
+            return
+        index = table.cursor_row
+        self.confirm_kill(self._entries[index], self._statuses[index])
+
+    def confirm_kill(self, entry: dict, status: str) -> None:
+        """Shared kill flow (list and detail views): confirm modal, then condor_rm."""
+        cluster_id = entry.get("cluster_id")
+        if not cluster_id:
+            self.notify("no cluster id recorded for this run", severity="warning")
+            return
+        if status not in _ACTIVE_STATUSES:
+            self.notify(f"job is already {status}", severity="warning")
+            return
+
+        def _on_confirm(confirmed: bool | None) -> None:
+            if confirmed:
+                self._kill(str(cluster_id))
+
+        self.push_screen(ConfirmKill(entry.get("jobname", "?"), str(cluster_id)), _on_confirm)
+
+    @work(thread=True, group="kill")
+    def _kill(self, cluster_id: str) -> None:
+        try:
+            result = subprocess.run(
+                ["condor_rm", cluster_id], capture_output=True, text=True, timeout=10
+            )
+            ok = result.returncode == 0
+            msg = (result.stdout or result.stderr).strip() or f"condor_rm {cluster_id}"
+        except (subprocess.TimeoutExpired, OSError) as e:
+            ok, msg = False, f"condor_rm failed: {e}"
+        self.call_from_thread(self.notify, msg, severity="information" if ok else "error")
+        if ok:
+            self.call_from_thread(self.action_refresh_statuses)

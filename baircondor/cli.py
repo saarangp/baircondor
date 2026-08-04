@@ -105,7 +105,7 @@ def _cmd_history(args) -> None:
     if not args.plain and sys.stdout.isatty() and sys.stderr.isatty():
         from .tui import RunBrowserApp
 
-        RunBrowserApp(entries[:cap]).run()
+        RunBrowserApp(entries[: args.n or 5]).run()
         return
 
     _print_history(entries, cap, args)
@@ -120,7 +120,7 @@ def _print_history(entries: list[dict], cap: int, args) -> None:
 
     has_more = len(entries) > cap
     entries = entries[:cap]
-    display = entries[: args.n]
+    display = entries[: args.n or 3]
 
     with ThreadPoolExecutor(max_workers=len(display)) as ex:
         statuses = list(ex.map(lambda e: get_job_status(e.get("cluster_id")), display))
@@ -367,9 +367,9 @@ def _add_history_parser(sub) -> None:
     p.add_argument(
         "-n",
         type=int,
-        default=3,
+        default=None,
         metavar="N",
-        help="Number of entries to show (default: 3).",
+        help="Number of entries to show (default: 5 interactive, 3 plain).",
     )
     p.add_argument(
         "-v",

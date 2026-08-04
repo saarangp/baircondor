@@ -105,3 +105,46 @@ async def test_detail_missing_file_message(tmp_path, monkeypatch):
         await pilot.press("enter")
         log = app.screen.query_one("#log-stdout")
         assert any("not readable" in line.text for line in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_list_kill_confirms_before_condor_rm(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(tui, "get_job_status", lambda cluster_id: "running")
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="job removed", stderr="")
+
+    monkeypatch.setattr(tui.subprocess, "run", fake_run)
+
+    app = RunBrowserApp([_entry(tmp_path / "run")])
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("k")
+        assert isinstance(app.screen, tui.ConfirmKill)
+
+        await pilot.press("n")  # decline: nothing runs
+        assert not isinstance(app.screen, tui.ConfirmKill)
+        assert calls == []
+
+        await pilot.press("k")
+        await pilot.press("y")  # confirm: condor_rm runs
+        await app.workers.wait_for_complete()
+        assert ["condor_rm", "123"] in calls
+
+
+@pytest.mark.asyncio
+async def test_detail_kill_uses_shared_flow(tmp_path, monkeypatch):
+    monkeypatch.setattr(tui, "get_job_status", lambda cluster_id: "running")
+    app = RunBrowserApp([_entry(tmp_path / "run")])
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("enter")
+        assert isinstance(app.screen, RunDetailScreen)
+        await pilot.press("k")
+        assert isinstance(app.screen, tui.ConfirmKill)
+        await pilot.press("n")
+        assert isinstance(app.screen, RunDetailScreen)
