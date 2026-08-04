@@ -52,10 +52,17 @@ $EDITOR $(baircondor config)
 <summary><b>Finding your runs</b></summary>
 
 After submitting, `baircondor history` opens an interactive browser of your last 5 jobs
-(`-n N` for more): arrow keys to move, **enter** to open a run (live-tailing stdout, with
-tabs for stderr and condor.log; `1`/`2`/`3` switch tabs), **esc**/**left** to go back,
-**k** to kill the selected job (works from the list or the detail view, with a y/n
-confirm), **y** to copy the run dir path, **r** to refresh statuses, **q** to quit.
+(`-n N` for more), with a machine column showing where each job landed. Keys:
+
+- arrows to move, **enter** to open a run, **esc**/**left** to go back, **q** to quit
+- **x** to cancel the selected job (y/n confirm; works from the list or the detail view)
+- **R** to resubmit a finished/failed run: same command, resources, and machine pinning,
+  in a fresh run dir
+- **y** to copy the run dir path, **r** to refresh statuses
+
+The detail view live-tails stdout, with tabs for stderr, condor.log, and an info tab
+(`1`/`2`/`3`/`4`) showing what the run used: resources, conda env, git commit, and the
+condor request/requirements lines.
 
 When output is piped (or with `--plain`) it prints a plain listing instead:
 

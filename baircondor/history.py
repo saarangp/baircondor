@@ -84,27 +84,50 @@ def get_last_dirs(
     return [Path(e["run_dir"]) for e in get_entries(n=n, user=user, history_file=history_file)]
 
 
-def get_job_status(cluster_id: str | None, timeout: float = 3.0) -> str:
+def get_job_info(cluster_id: str | None, timeout: float = 3.0) -> tuple[str, str]:
+    """(status, short execute-host name) for a cluster id; ("?", "") when unknown."""
     if cluster_id is None:
-        return "?"
+        return "?", ""
     try:
         result = subprocess.run(
-            ["condor_q", str(cluster_id), "-format", "%d\n", "JobStatus"],
+            ["condor_q", str(cluster_id), "-af", "JobStatus", "RemoteHost"],
             capture_output=True,
             text=True,
             timeout=timeout,
         )
-        code = result.stdout.strip()
-        if code:
-            return _STATUS_MAP.get(code, "?")
-
-        result = subprocess.run(
-            ["condor_history", str(cluster_id), "-format", "%d\n", "JobStatus", "-match", "1"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        code = result.stdout.strip()
-        return _STATUS_MAP.get(code, "?")
+        line = result.stdout.strip()
+        if not line:
+            result = subprocess.run(
+                [
+                    "condor_history",
+                    str(cluster_id),
+                    "-af",
+                    "JobStatus",
+                    "LastRemoteHost",
+                    "-match",
+                    "1",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            line = result.stdout.strip()
+        return _parse_job_info(line)
     except (subprocess.TimeoutExpired, OSError):
-        return "?"
+        return "?", ""
+
+
+def _parse_job_info(line: str) -> tuple[str, str]:
+    parts = line.split()
+    if not parts:
+        return "?", ""
+    status = _STATUS_MAP.get(parts[0], "?")
+    host = ""
+    if len(parts) > 1 and parts[1] != "undefined":
+        # RemoteHost looks like slot1@hostname.domain — keep just the short hostname
+        host = parts[1].split("@")[-1].split(".")[0]
+    return status, host
+
+
+def get_job_status(cluster_id: str | None, timeout: float = 3.0) -> str:
+    return get_job_info(cluster_id, timeout)[0]
