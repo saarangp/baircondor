@@ -117,6 +117,15 @@ baircondor submit --machine REDLRADADM35839 --gpus 1 -- python train.py
 > that don't export their filesystem (e.g. PHI-restricted nodes) aren't reachable this way and
 > would need condor file transfer, which baircondor doesn't do yet.
 
+**What resolves where.** The job runs entirely on the target machine, so every path is
+interpreted from its point of view:
+
+| Thing | Where it lives / resolves |
+|---|---|
+| Your command, GPUs, data reads | Execute on the `--machine` host |
+| Repo cwd (`initialdir`) and `--scratch` | Captured at submit time; must be the same absolute path on both hosts (shared NFS, e.g. `/REDLRADADM35839/home/$USER/...`) |
+| `--conda-base` (or auto-detection) | Resolved on the execute host — point it at that machine's conda install |
+
 </details>
 
 <details>

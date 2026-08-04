@@ -238,7 +238,8 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         "regardless of where you submit from. Matches machines whose name starts with "
         "NAME, case-insensitively. Takes priority over --pin-submit-host / "
         "--no-pin-submit-host (a config condor.machine default likewise wins over "
-        "--no-pin-submit-host).",
+        "--no-pin-submit-host). Paths (cwd, --scratch, --conda-base) are resolved on "
+        "that host; cwd and --scratch must be shared-filesystem paths.",
     )
     p.add_argument(
         "--pin-submit-host",
