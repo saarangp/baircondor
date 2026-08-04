@@ -69,7 +69,7 @@ def run_submit(args) -> Path:
         getattr(args, "tag", None),
     )
 
-    _validate_conda(conda)
+    _validate_conda(conda, machine)
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -132,7 +132,7 @@ def run_interactive(args) -> Path:
         getattr(args, "tag", None),
     )
 
-    _validate_conda(conda)
+    _validate_conda(conda, machine)
 
     quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -196,11 +196,17 @@ def _make_run_dir(
     return Path(*parts)
 
 
-def _validate_conda(conda: dict) -> None:
-    if conda.get("env") and not conda.get("conda_base"):
+def _validate_conda(conda: dict, machine: str | None) -> None:
+    base = conda.get("conda_base")
+    if not base:
+        return  # no explicit base: run.sh resolves one at runtime on the execute host
+    if machine:
+        return  # base is interpreted on a different host; the submit host can't check it
+    activate = Path(base).expanduser() / "etc" / "profile.d" / "conda.sh"
+    if not activate.is_file():
         sys.exit(
-            "error: --conda-env requires a conda base path; auto-detection failed. "
-            "Set --conda-base or conda.conda_base in config."
+            f"error: conda base '{base}' has no etc/profile.d/conda.sh (expected {activate}). "
+            "Check --conda-base."
         )
 
 
@@ -210,6 +216,11 @@ def _condor_escape_arg(arg: str) -> str:
     Rules: double-quotes are doubled (""), arguments containing spaces/tabs/single-quotes
     are wrapped in single quotes with interior single-quotes doubled ('').
     """
+    if "\n" in arg or "\r" in arg:
+        raise ValueError(
+            "command arguments cannot contain newlines: HTCondor's arguments line "
+            "cannot span multiple lines. Remove the embedded newline."
+        )
     result = arg.replace('"', '""')
     if " " in result or "\t" in result or "'" in result:
         result = "'" + result.replace("'", "''") + "'"

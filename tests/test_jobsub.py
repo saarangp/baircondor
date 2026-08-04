@@ -154,6 +154,14 @@ class TestCondorEscapeArg:
     def test_path_no_spaces(self):
         assert _condor_escape_arg("/usr/local/bin/python") == "/usr/local/bin/python"
 
+    def test_newline_rejected(self):
+        with pytest.raises(ValueError):
+            _condor_escape_arg("a\nb")
+
+    def test_carriage_return_rejected(self):
+        with pytest.raises(ValueError):
+            _condor_escape_arg("a\rb")
+
 
 class TestPatchArgs:
     def test_simple_command(self, tmp_path):
@@ -225,7 +233,7 @@ def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
         },
     )
     monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
-    monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
+    monkeypatch.setattr(submit_mod, "_validate_conda", lambda *a, **k: None)
     monkeypatch.setattr(submit_mod, "_submit", lambda *args, **kwargs: None)
     monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -274,7 +282,7 @@ def test_run_submit_machine_overrides_submit_host_pin(monkeypatch, tmp_path):
         lambda cfg, args: {"gpus": 0, "cpus": 4, "mem": "8G", "disk": None},
     )
     monkeypatch.setattr(submit_mod, "resolve_conda", lambda cfg, args: {})
-    monkeypatch.setattr(submit_mod, "_validate_conda", lambda conda: None)
+    monkeypatch.setattr(submit_mod, "_validate_conda", lambda *a, **k: None)
     monkeypatch.setattr(submit_mod, "_submit", lambda *args, **kwargs: None)
     monkeypatch.setattr(submit_mod, "write_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(

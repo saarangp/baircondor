@@ -103,9 +103,27 @@ def _render_run_sh(
     ]
 
     if conda.get("env"):
+        # Resolve the conda base on the EXECUTE host at runtime, not on the submit host:
+        # under --machine the two hosts have different conda installs. Honor an explicit
+        # base if given, else `conda info --base`, else probe the usual $HOME locations.
         conda_base = conda.get("conda_base") or ""
         parts += [
-            f'source "{conda_base}/etc/profile.d/conda.sh"',
+            f'CONDA_BASE="{conda_base}"',
+            'if [[ -z "$CONDA_BASE" ]]; then',
+            "  if command -v conda >/dev/null 2>&1; then",
+            '    CONDA_BASE="$(conda info --base)"',
+            "  else",
+            '    for _d in "$HOME/anaconda3" "$HOME/miniconda3" "$HOME/miniforge3"; do',
+            '      if [[ -f "$_d/etc/profile.d/conda.sh" ]]; then CONDA_BASE="$_d"; break; fi',
+            "    done",
+            "  fi",
+            "fi",
+            'if [[ -z "$CONDA_BASE" || ! -f "$CONDA_BASE/etc/profile.d/conda.sh" ]]; then',
+            '  echo "baircondor: could not find a conda installation on $(hostname);'
+            ' set --conda-base" >&2',
+            "  exit 1",
+            "fi",
+            'source "$CONDA_BASE/etc/profile.d/conda.sh"',
             f'conda activate "{conda["env"]}"',
             "",
         ]

@@ -33,10 +33,10 @@ def main() -> None:
 
     if args.subcommand == "submit":
         _maybe_run_wizard(args)
-        run_submit(args)
+        _run_clean(run_submit, args)
     elif args.subcommand == "interactive":
         _maybe_run_wizard(args)
-        run_interactive(args)
+        _run_clean(run_interactive, args)
     elif args.subcommand == "history":
         _cmd_history(args)
     elif args.subcommand == "last":
@@ -45,6 +45,14 @@ def main() -> None:
         print(CONFIG_PATH)
     elif args.subcommand == "setup":
         _cmd_setup()
+
+
+def _run_clean(handler, args) -> None:
+    """Run a submission handler, turning input errors into a clean message (no traceback)."""
+    try:
+        handler(args)
+    except ValueError as e:
+        sys.exit(f"error: {e}")
 
 
 # ── setup wizard ──────────────────────────────────────────────────────────────
@@ -218,8 +226,9 @@ def _common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--conda-base",
         metavar="PATH",
-        help="Path to conda installation (e.g. /raid/$USER/miniconda3). "
-        "Auto-detected if omitted.",
+        help="Path to conda installation (e.g. /raid/$USER/miniconda3). If omitted, it is "
+        "detected at runtime on the execute host (conda on PATH, else ~/anaconda3, "
+        "~/miniconda3, ~/miniforge3).",
     )
     p.add_argument(
         "--machine",

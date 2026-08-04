@@ -3,7 +3,15 @@
 import subprocess
 from types import SimpleNamespace
 
-from baircondor.config import resolve_conda, resolve_machine, resolve_pin_submit_host
+import pytest
+
+from baircondor.config import (
+    _autodetect_conda_base,
+    resolve_conda,
+    resolve_machine,
+    resolve_pin_submit_host,
+)
+from baircondor.submit import _validate_conda
 
 
 def _args(conda_env=None, conda_base=None):
@@ -23,39 +31,78 @@ def test_conda_base_from_config():
     assert out["conda_base"] == "/cfg/base"
 
 
-def test_conda_base_autodetect_from_conda_info(monkeypatch):
+def test_resolve_conda_no_base_returns_none():
+    """Base is resolved at runtime in run.sh, not on the submit host."""
     cfg = {"conda": {"conda_base": None}}
+    out = resolve_conda(cfg, _args(conda_env="myenv"))
+    assert out["conda_base"] is None
 
+
+def test_conda_base_bin_conda_normalized():
+    cfg = {"conda": {"conda_base": None}}
+    out = resolve_conda(cfg, _args(conda_env="myenv", conda_base="/opt/conda/bin/conda"))
+    assert out["conda_base"] == "/opt/conda"
+
+
+def test_conda_base_plain_dir_unchanged():
+    cfg = {"conda": {"conda_base": None}}
+    out = resolve_conda(cfg, _args(conda_env="myenv", conda_base="/opt/conda"))
+    assert out["conda_base"] == "/opt/conda"
+
+
+# _autodetect_conda_base is no longer called during submission, but the setup wizard
+# still uses it to pre-fill a suggestion on the login node.
+def test_autodetect_from_conda_info(monkeypatch):
     def fake_run(*args, **kwargs):
         return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="/opt/conda\n")
 
     monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
-    out = resolve_conda(cfg, _args(conda_env="myenv"))
-    assert out["conda_base"] == "/opt/conda"
+    assert _autodetect_conda_base() == "/opt/conda"
 
 
-def test_conda_base_autodetect_from_conda_exe(monkeypatch):
-    cfg = {"conda": {"conda_base": None}}
-
+def test_autodetect_from_conda_exe(monkeypatch):
     def fake_run(*args, **kwargs):
         return subprocess.CompletedProcess(args=args[0], returncode=1, stdout="")
 
     monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
     monkeypatch.setenv("CONDA_EXE", "/home/user/miniconda3/bin/conda")
-    out = resolve_conda(cfg, _args(conda_env="myenv"))
-    assert out["conda_base"] == "/home/user/miniconda3"
+    assert _autodetect_conda_base() == "/home/user/miniconda3"
 
 
-def test_conda_base_autodetect_absent(monkeypatch):
-    cfg = {"conda": {"conda_base": None}}
-
+def test_autodetect_absent(monkeypatch):
     def fake_run(*args, **kwargs):
         raise OSError
 
     monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
     monkeypatch.delenv("CONDA_EXE", raising=False)
-    out = resolve_conda(cfg, _args(conda_env="myenv"))
-    assert out["conda_base"] is None
+    assert _autodetect_conda_base() is None
+
+
+# ── _validate_conda: fail fast on a bad same-host base ────────────────────────
+
+
+def _write_conda_sh(base):
+    activate = base / "etc" / "profile.d"
+    activate.mkdir(parents=True)
+    (activate / "conda.sh").write_text("")
+
+
+def test_validate_conda_ok_when_activate_present(tmp_path):
+    _write_conda_sh(tmp_path)
+    _validate_conda({"env": "train", "conda_base": str(tmp_path)}, None)
+
+
+def test_validate_conda_exits_when_activate_missing(tmp_path):
+    with pytest.raises(SystemExit):
+        _validate_conda({"env": "train", "conda_base": str(tmp_path / "nope")}, None)
+
+
+def test_validate_conda_skips_when_machine_set(tmp_path):
+    _validate_conda({"env": "train", "conda_base": str(tmp_path / "nope")}, "OTHER")
+
+
+def test_validate_conda_skips_when_no_base():
+    _validate_conda({"env": "train", "conda_base": None}, None)
 
 
 def test_pin_submit_host_from_config_default():

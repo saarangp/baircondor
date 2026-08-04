@@ -75,9 +75,19 @@ def resolve_resources(cfg: dict, args) -> dict[str, Any]:
 def resolve_conda(cfg: dict, args) -> dict[str, str | None]:
     conda_env = getattr(args, "conda_env", None)
     conda_base = getattr(args, "conda_base", None) or cfg["conda"]["conda_base"]
-    if conda_env and not conda_base:
-        conda_base = _autodetect_conda_base()
-    return {"env": conda_env, "conda_base": conda_base}
+    # An unset base is resolved at runtime inside run.sh on the execute host (hosts
+    # differ under --machine), so don't autodetect on the submit host here.
+    return {"env": conda_env, "conda_base": _normalize_conda_base(conda_base)}
+
+
+def _normalize_conda_base(base: str | None) -> str | None:
+    """Normalize a base that points at the conda binary (.../bin/conda) to its root."""
+    if not base:
+        return base
+    p = Path(base)
+    if p.name == "conda" and p.parent.name == "bin":
+        return str(p.parent.parent)
+    return base
 
 
 def resolve_pin_submit_host(cfg: dict, args) -> bool:
