@@ -214,7 +214,7 @@ async def test_list_kill_confirms_before_condor_rm(tmp_path, monkeypatch):
         assert not isinstance(app.screen, tui.Confirm)
         assert calls == []
 
-        await pilot.press("k")  # legacy alias still works
+        await pilot.press("x")
         await pilot.press("y")  # confirm: condor_rm runs
         await app.workers.wait_for_complete()
         assert ["condor_rm", "123"] in calls

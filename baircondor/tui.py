@@ -147,7 +147,7 @@ class RunDetailScreen(Screen):
         Binding("2", "show_tab('stderr')", "stderr", show=False),
         Binding("3", "show_tab('condor')", "condor.log", show=False),
         Binding("4", "show_tab('info')", "info", show=False),
-        Binding("x,k", "kill", "cancel job"),
+        Binding("x", "kill", "cancel job"),
         Binding("R", "resubmit", "resubmit"),
         Binding("y", "copy_path", "copy run dir"),
     ]
@@ -274,7 +274,7 @@ class RunBrowserApp(App):
     BINDINGS = [
         Binding("q,escape", "quit", "quit"),
         Binding("r", "refresh_statuses", "refresh"),
-        Binding("x,k", "kill", "cancel job"),
+        Binding("x", "kill", "cancel job"),
         Binding("R", "resubmit", "resubmit"),
     ]
 
