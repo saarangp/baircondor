@@ -88,11 +88,7 @@ def _cmd_setup() -> None:
 
 
 def _cmd_history(args) -> None:
-    from concurrent.futures import ThreadPoolExecutor
-
-    from rich.text import Text
-
-    from .history import HISTORY_FILE, get_entries, get_job_status
+    from .history import HISTORY_FILE, get_entries
 
     cap = 50
     entries = get_entries(n=cap + 1, user=get_user(), history_file=HISTORY_FILE)
@@ -100,6 +96,22 @@ def _cmd_history(args) -> None:
     if not entries:
         _console.print("[dim]No submissions yet.[/dim]")
         return
+
+    if not args.plain and sys.stdout.isatty() and sys.stderr.isatty():
+        from .tui import RunBrowserApp
+
+        RunBrowserApp(entries[:cap]).run()
+        return
+
+    _print_history(entries, cap, args)
+
+
+def _print_history(entries: list[dict], cap: int, args) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from rich.text import Text
+
+    from .history import get_job_status
 
     has_more = len(entries) > cap
     entries = entries[:cap]
@@ -148,14 +160,9 @@ def _cmd_last(args) -> None:
 
 
 def _status_style(status: str) -> str:
-    return {
-        "idle": "yellow",
-        "running": "green",
-        "done": "dim green",
-        "failed": "red",
-        "held": "red",
-        "removed": "dim red",
-    }.get(status, "dim")
+    from .history import STATUS_COLORS
+
+    return STATUS_COLORS.get(status, "dim")
 
 
 # ── subcommand parsers ────────────────────────────────────────────────────────
@@ -296,7 +303,16 @@ def _add_interactive_parser(sub) -> None:
 
 
 def _add_history_parser(sub) -> None:
-    p = sub.add_parser("history", help="Show recent job submissions.")
+    p = sub.add_parser(
+        "history",
+        help="Browse recent job submissions (interactive TUI in a terminal).",
+    )
+    p.add_argument(
+        "--plain",
+        action="store_true",
+        help="Print the plain listing instead of the interactive browser "
+        "(automatic when output is piped).",
+    )
     p.add_argument(
         "-n",
         type=int,

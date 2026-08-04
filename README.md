@@ -50,7 +50,12 @@ $EDITOR $(baircondor config)
 <details>
 <summary><b>Finding your runs</b></summary>
 
-After submitting, use `baircondor history` to see recent jobs with live status:
+After submitting, `baircondor history` opens an interactive browser of your recent jobs:
+arrow keys to move, **enter** to open a run (live-tailing stdout, with tabs for stderr and
+condor.log; `1`/`2`/`3` switch tabs), **esc**/**left** to go back, **k** to kill the job,
+**y** to copy the run dir path, **r** to refresh statuses, **q** to quit.
+
+When output is piped (or with `--plain`) it prints a plain listing instead:
 
 ```
 [2026-05-15 14:23]  myproject  ● running
@@ -60,7 +65,7 @@ After submitting, use `baircondor history` to see recent jobs with live status:
   /raid/myuser/condor-runs/myuser/eval-run/20260514_091145_xyz789
 ```
 
-Options: `-n N` (show N entries, default 3), `-v` (also show GPUs and command).
+Plain-mode options: `-n N` (show N entries, default 3), `-v` (also show GPUs and command).
 
 For shell use, `baircondor last` prints just the path:
 

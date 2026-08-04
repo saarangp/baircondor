@@ -11,6 +11,7 @@ dependencies = [
     "pyyaml",
     "pydantic",
     "rich",
+    "textual",
 ]
 
 [project.scripts]
@@ -19,6 +20,7 @@ baircondor = "baircondor.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-asyncio",
     "flake8",
 ]
 

@@ -10,6 +10,15 @@ from pathlib import Path
 
 HISTORY_FILE = Path.home() / ".local" / "share" / "baircondor" / "history.jsonl"
 
+STATUS_COLORS = {
+    "idle": "yellow",
+    "running": "green",
+    "done": "dim green",
+    "failed": "red",
+    "held": "red",
+    "removed": "dim red",
+}
+
 _STATUS_MAP = {
     "1": "idle",
     "2": "running",
@@ -97,5 +106,5 @@ def get_job_status(cluster_id: str | None, timeout: float = 3.0) -> str:
         )
         code = result.stdout.strip()
         return _STATUS_MAP.get(code, "?")
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError):
         return "?"
