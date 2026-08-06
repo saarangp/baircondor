@@ -246,6 +246,11 @@ condor:
   omit_request_gpus_when_zero: true
   pin_submit_host: true
   machine: null    # pin to a specific host by name; overrides pin_submit_host
+  require_gpus: {}    # per-machine require_gpus expression, e.g.:
+                       #   redlradadm35840: 'UUID != "GPU-abcd1234"'
+                       # keyed by host name/prefix, matched against --machine or
+                       # the pinned submit host; find the right attribute/value
+                       # with `condor_status -l <machine> | grep -i gpu`
 
 conda:
   conda_base: null    # auto-detected if omitted

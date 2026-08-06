@@ -15,6 +15,7 @@ def write_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool = True,
     machine: str | None = None,
+    require_gpus: str | None = None,
 ) -> Path:
     path = run_dir / "job.sub"
     path.write_text(
@@ -27,6 +28,7 @@ def write_job_sub(
             pin_submit_host,
             omit_gpus_when_zero,
             machine,
+            require_gpus,
         )
     )
     return path
@@ -51,6 +53,7 @@ def _render_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool,
     machine: str | None,
+    require_gpus: str | None = None,
 ) -> str:
     run_dir / "run.sh"
     lines = [
@@ -77,6 +80,8 @@ def _render_job_sub(
     gpus = resources["gpus"]
     if gpus > 0:
         lines.append(f"request_gpus = {gpus}")
+        if require_gpus:
+            lines.append(f"require_gpus = {require_gpus}")
     elif not omit_gpus_when_zero:
         lines.append("request_gpus = 0")
 

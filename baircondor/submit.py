@@ -20,6 +20,7 @@ from .config import (
     resolve_conda,
     resolve_machine,
     resolve_pin_submit_host,
+    resolve_require_gpus,
     resolve_resources,
 )
 from .history import append_entry
@@ -95,6 +96,8 @@ def run_submit(args) -> Path:
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
 
+    require_gpus = resolve_require_gpus(cfg, machine, pin_submit_host, submit_host)
+
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
     _log("📝 Generated run.sh", quiet)
     write_job_sub(
@@ -106,6 +109,7 @@ def run_submit(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        require_gpus=require_gpus,
     )
     _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
@@ -159,6 +163,8 @@ def run_interactive(args) -> Path:
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
 
+    require_gpus = resolve_require_gpus(cfg, machine, pin_submit_host, submit_host)
+
     command = ["/bin/bash", "-i"]
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
     _log("📝 Generated run.sh", quiet)
@@ -171,6 +177,7 @@ def run_interactive(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        require_gpus=require_gpus,
     )
     _log("📝 Generated job.sub", quiet)
     write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)

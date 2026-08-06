@@ -10,6 +10,7 @@ from baircondor.config import (
     resolve_conda,
     resolve_machine,
     resolve_pin_submit_host,
+    resolve_require_gpus,
 )
 from baircondor.submit import _validate_conda
 
@@ -137,3 +138,34 @@ def test_machine_cli_overrides_config():
     args = _args()
     args.machine = "CLIHOST"
     assert resolve_machine(cfg, args) == "CLIHOST"
+
+
+def test_require_gpus_matches_explicit_machine():
+    cfg = {"condor": {"require_gpus": {"REDLRADADM35840": 'UUID != "GPU-bad"'}}}
+    assert (
+        resolve_require_gpus(cfg, "REDLRADADM35840.ad.medctr.ucla.edu", True, "submit-host")
+        == 'UUID != "GPU-bad"'
+    )
+
+
+def test_require_gpus_matches_pinned_submit_host():
+    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+    assert (
+        resolve_require_gpus(cfg, None, True, "redlradadm35840.ad.medctr.ucla.edu")
+        == 'UUID != "GPU-bad"'
+    )
+
+
+def test_require_gpus_no_match_returns_none():
+    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+    assert resolve_require_gpus(cfg, None, True, "otherhost.ad.medctr.ucla.edu") is None
+
+
+def test_require_gpus_none_when_pinning_disabled_and_no_machine():
+    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+    assert resolve_require_gpus(cfg, None, False, "redlradadm35840.ad.medctr.ucla.edu") is None
+
+
+def test_require_gpus_absent_key_returns_none():
+    cfg = {"condor": {"require_gpus": {}}}
+    assert resolve_require_gpus(cfg, "REDLRADADM35840", True, "submit-host") is None

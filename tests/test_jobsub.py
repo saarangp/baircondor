@@ -30,6 +30,7 @@ def _sub_text(
     pin_submit_host=True,
     omit_zero=True,
     machine=None,
+    require_gpus=None,
 ):
     write_job_sub(
         run_dir,
@@ -40,6 +41,7 @@ def _sub_text(
         pin_submit_host,
         omit_zero,
         machine=machine,
+        require_gpus=require_gpus,
     )
     return (run_dir / "job.sub").read_text()
 
@@ -102,6 +104,24 @@ def test_gpu_included_when_zero_and_flag_false(run_dir, repo_dir):
     resources = {"gpus": 0, "cpus": 4, "mem": "8G", "disk": None}
     text = _sub_text(run_dir, repo_dir, resources, omit_zero=False)
     assert "request_gpus = 0" in text
+
+
+def test_require_gpus_emitted_when_set(run_dir, repo_dir):
+    resources = {"gpus": 1, "cpus": 6, "mem": "24G", "disk": None}
+    text = _sub_text(run_dir, repo_dir, resources, require_gpus='UUID != "GPU-bad"')
+    assert 'require_gpus = UUID != "GPU-bad"' in text
+
+
+def test_require_gpus_omitted_when_none(run_dir, repo_dir):
+    resources = {"gpus": 1, "cpus": 6, "mem": "24G", "disk": None}
+    text = _sub_text(run_dir, repo_dir, resources)
+    assert "require_gpus =" not in text
+
+
+def test_require_gpus_omitted_when_no_gpus_requested(run_dir, repo_dir):
+    resources = {"gpus": 0, "cpus": 4, "mem": "8G", "disk": None}
+    text = _sub_text(run_dir, repo_dir, resources, require_gpus='UUID != "GPU-bad"')
+    assert "require_gpus =" not in text
 
 
 def test_disk_included_when_set(run_dir, repo_dir):

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-06
+
+### Per-machine GPU exclusion
+- New `condor.require_gpus` config option: a per-machine `require_gpus`
+  expression (e.g. to exclude a specific GPU by UUID after an ECC error),
+  keyed by host name/prefix and matched against `--machine` or the pinned
+  submit host, same as the existing `requirements` targeting.
+
 ## 2026-08-04
 
 ### Interactive history browser
