@@ -213,7 +213,7 @@ def test_run_submit_pins_to_hostname_f(monkeypatch, tmp_path):
     monkeypatch.setattr(
         submit_mod,
         "load_config",
-        lambda _: {
+        lambda *a, **k: {
             "defaults": {"scratch": str(tmp_path / "scratch"), "runs_subdir": "condor-runs"},
             "conda": {},
             "condor": {
@@ -267,7 +267,7 @@ def test_run_submit_machine_overrides_submit_host_pin(monkeypatch, tmp_path):
     monkeypatch.setattr(
         submit_mod,
         "load_config",
-        lambda _: {
+        lambda *a, **k: {
             "defaults": {"scratch": str(tmp_path / "scratch"), "runs_subdir": "condor-runs"},
             "conda": {},
             "condor": {
@@ -312,3 +312,29 @@ def test_run_submit_machine_overrides_submit_host_pin(monkeypatch, tmp_path):
     text = job_sub_files[0].read_text()
     assert 'requirements = regexp("^REDLRADADM35840", Machine, "i")' in text
     assert "toLower(Machine)" not in text
+
+
+# --- extra job.sub lines (--sub-line / profile sub_lines) ---
+
+
+def test_extra_lines_appended_after_batch_name(run_dir, repo_dir):
+    from baircondor.templates import validate_sub_line
+
+    resources = {"gpus": 1, "cpus": 6, "mem": "24G", "disk": None}
+    write_job_sub(
+        run_dir,
+        repo_dir,
+        resources,
+        "myjob",
+        "submit-host.example.com",
+        True,
+        True,
+        extra_lines=['require_gpus = DeviceUuid != "abc"', "  +WantX = True "],
+    )
+    text = (run_dir / "job.sub").read_text()
+    assert text.index('+JobBatchName = "myjob"') < text.index('require_gpus = DeviceUuid != "abc"')
+    assert "\n+WantX = True\n" in text  # stripped
+    assert validate_sub_line(" a = b ") == "a = b"
+    for bad in ("nonsense", "= x", "a = b\nc = d"):
+        with pytest.raises(ValueError):
+            validate_sub_line(bad)

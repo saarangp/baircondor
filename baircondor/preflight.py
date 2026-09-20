@@ -22,7 +22,7 @@ from .history import HISTORY_FILE
 from .submit import _get_submit_host, _patch_args, _warn_unshared_paths
 from .templates import write_job_sub
 
-_console = Console(stderr=True)
+_console = Console(stderr=True, soft_wrap=True)
 _PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
 
 PREFLIGHT_RESOURCES = {"gpus": 0, "cpus": 1, "mem": "512M", "disk": None}
@@ -119,6 +119,13 @@ def run_preflight(args) -> None:
     timeout = getattr(args, "timeout", 300)
     report = run_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg, timeout)
     _print_report(report, machine, repo_dir)
+
+    conda_env = getattr(args, "conda_env", None)
+    if conda_env:
+        problems = [p for p in check_problems(report, conda_env, None) if "conda" in p]
+        if problems:
+            sys.exit(f"error: {machine}: " + "; ".join(problems))
+        _console.print(f"{_PREFIX} ✅ conda env '{escape(conda_env)}' exists on {escape(machine)}")
 
 
 def run_live_check(

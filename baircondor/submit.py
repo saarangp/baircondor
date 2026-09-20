@@ -15,6 +15,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from .config import (
+    apply_profile,
     get_user,
     load_config,
     resolve_conda,
@@ -26,7 +27,7 @@ from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
 
-_console = Console(stderr=True)
+_console = Console(stderr=True, soft_wrap=True)
 _PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
 
 
@@ -41,11 +42,17 @@ def _get_submit_host() -> str:
 
 
 def run_submit(args) -> Path:
-    cfg = load_config(getattr(args, "config", None))
+    repo_dir = Path.cwd()
+    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
+    quiet = getattr(args, "quiet", False)
+    profile = getattr(args, "profile", None)
+    if apply_profile(cfg, args, profile):
+        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
     pin_submit_host = resolve_pin_submit_host(cfg, args)
     machine = resolve_machine(cfg, args)
+    sub_lines = list(getattr(args, "sub_lines", None) or [])
 
     # strip leading "--" separator that argparse REMAINDER captures
     command = args.command
@@ -54,7 +61,15 @@ def run_submit(args) -> Path:
     if not command:
         sys.exit("error: a command is required after --")
 
-    repo_dir = Path.cwd()
+    after = getattr(args, "after", None)
+    if after and not args.dry_run:
+        from .wait import wait_for_cluster
+
+        _log(f"⏳ --after {after}: waiting for that job to finish before submitting", quiet)
+        code = wait_for_cluster(after, interval=getattr(args, "after_interval", 60))
+        if code != 0:
+            sys.exit(f"error: --after {after}: that job did not finish cleanly; not submitting")
+
     submit_host = _get_submit_host()
     user = get_user()
     jobname = args.jobname or repo_dir.name
@@ -71,8 +86,6 @@ def run_submit(args) -> Path:
 
     _validate_conda(conda, machine)
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
-
-    quiet = getattr(args, "quiet", False)
 
     if getattr(args, "check", False):
         if not machine:
@@ -106,9 +119,10 @@ def run_submit(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)
-    write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
+    write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda, profile=profile)
     _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"
@@ -131,13 +145,18 @@ def run_submit(args) -> Path:
 
 
 def run_interactive(args) -> Path:
-    cfg = load_config(getattr(args, "config", None))
+    repo_dir = Path.cwd()
+    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
+    quiet = getattr(args, "quiet", False)
+    profile = getattr(args, "profile", None)
+    if apply_profile(cfg, args, profile):
+        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
     resources = resolve_resources(cfg, args)
     conda = resolve_conda(cfg, args)
     pin_submit_host = resolve_pin_submit_host(cfg, args)
     machine = resolve_machine(cfg, args)
+    sub_lines = list(getattr(args, "sub_lines", None) or [])
 
-    repo_dir = Path.cwd()
     submit_host = _get_submit_host()
     user = get_user()
     jobname = args.jobname or "interactive"
@@ -155,7 +174,6 @@ def run_interactive(args) -> Path:
     _validate_conda(conda, machine)
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
-    quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
 
@@ -171,9 +189,12 @@ def run_interactive(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)
-    write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)
+    write_meta(
+        run_dir, repo_dir, jobname, "interactive", command, resources, conda, profile=profile
+    )
     _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"

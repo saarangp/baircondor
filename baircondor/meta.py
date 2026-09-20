@@ -17,6 +17,7 @@ def write_meta(
     command: list[str],
     resources: dict,
     conda: dict,
+    profile: str | None = None,
 ) -> Path:
     data = {
         "user": _get_user(),
@@ -29,6 +30,7 @@ def write_meta(
         "command": command,
         "resources": {k: v for k, v in resources.items() if v is not None},
         "conda": {k: v for k, v in conda.items() if v is not None},
+        "profile": profile,
         "git": _git_info(repo_dir),
     }
     path = run_dir / "meta.json"

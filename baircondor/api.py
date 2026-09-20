@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 from pydantic import BaseModel, ConfigDict
 
+from baircondor.config import PROFILE_KEYS, apply_profile, load_config
 from baircondor.submit import run_interactive, run_submit
 
 
@@ -40,7 +41,22 @@ class CondorConfig(BaseModel):
     conda_base: str | None = None
     config: str | None = None
     machine: str | None = None
+    profile: str | None = None
+    sub_lines: list[str] | None = None
     dry_run: bool = False
+
+    @classmethod
+    def from_profile(cls, name: str, repo_dir: Path | None = None, **overrides) -> "CondorConfig":
+        """Build a config from a named profile in the repo's .baircondor.yaml.
+
+        Keyword overrides win over the profile, exactly like CLI flags do.
+        """
+        cfg = load_config(overrides.get("config"), repo_dir=repo_dir)
+        ns = SimpleNamespace(**{k: None for k in PROFILE_KEYS})
+        apply_profile(cfg, ns, name)
+        values = {k: v for k, v in vars(ns).items() if v is not None and k in cls.model_fields}
+        values.update(overrides)
+        return cls(profile=name, **values)
 
 
 def _build_namespace(condor: CondorConfig | None, kwargs: dict) -> SimpleNamespace:

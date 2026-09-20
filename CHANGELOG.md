@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-20
+
+### For agents and labmates
+- `AGENTS.md`: the rules for running experiments here through Claude Code or Codex,
+  learned from the swm and Laya2 campaigns. `examples/AGENTS.template.md` is the cluster
+  section to paste into an experiment repo. `CLAUDE.md` now imports `AGENTS.md`.
+- `baircondor install-skill` symlinks a bundled skill into `~/.claude/skills` and
+  `~/.codex/skills`.
+
+### Repo config and profiles
+- A committed `.baircondor.yaml` (cwd up to the git root) layers over the personal
+  config and defines named `profiles`. `baircondor submit --profile NAME` fills unset
+  flags from it; explicit flags still win. `baircondor profiles` lists them. `${USER}`
+  and `~` expand. The profile is recorded in `meta.json`.
+  `CondorConfig.from_profile()` for the Python API.
+
+### GPU cap audit
+- `baircondor gpus [--machine NAME] [--need N] [--json]`: per-GPU owner and source
+  (direct process or condor slot), your total against the 3-per-server cap including
+  idle jobs in the queue, and exit 1 when a launch would exceed it.
+
+### Waiting and chaining
+- `baircondor wait [CLUSTER|last]`: blocks until the job leaves the queue. Exit 3 on a
+  hold with `HoldReason` printed (never releases or resubmits), 4 removed, 2 unknown,
+  5 timeout; a single empty `condor_q` is not treated as an exit.
+- `submit --after CLUSTER`: wait for that job to succeed on the submit host, then submit.
+
+### Smaller
+- `--sub-line 'key = value'` (repeatable, also `sub_lines` in a profile) appends verbatim
+  lines to `job.sub`, e.g. `require_gpus = DeviceUuid != "..."` to avoid a faulty GPU.
+- `preflight --conda-env ENV` exits non-zero when the env is missing on the target.
+- Output no longer wraps long paths when piped or logged.
+- `--check` help and README now say it submits when the checks pass; `--dry-run` is the
+  only no-submit option.
+
 ## 2026-08-04
 
 ### Interactive history browser

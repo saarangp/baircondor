@@ -14,14 +14,20 @@ pip install -e .
 
 ```bash
 baircondor setup                              # first-time setup (auto-runs on first submit too)
+baircondor gpus                               # who holds which GPU; are you under the 3-per-server cap
 baircondor submit --gpus N -- your command   # submit a GPU batch job
+baircondor submit --profile NAME -- cmd      # same, with the repo's committed launch recipe
 baircondor interactive --gpus 1              # interactive shell with a GPU
 baircondor history                           # recent submissions
 baircondor last                              # path to most recent run dir (shell-composable)
+baircondor wait                              # block until your last job leaves the queue
 baircondor preflight --machine NAME          # check conda envs + repo state on another machine
 ```
 
 That's it for most use cases. Everything else is optional.
+
+Running experiments through Claude Code or Codex? Read [`AGENTS.md`](AGENTS.md) and run
+`baircondor install-skill` once.
 
 ---
 
@@ -156,16 +162,115 @@ It prints the machine's conda base and env list, whether your cwd exists there, 
 git commit it sees at that path (with a loud warning if it differs from your local
 checkout).
 
+Pass `--conda-env ENV` to also require that env there; the command exits non-zero with
+the env list if it is missing.
+
 You don't need to run it before every submit — three layers cover you:
 
 - **Always on:** jobs that reach a missing conda env fail immediately with the list of
   envs that do exist on that host, visible in the stderr tab of `baircondor history`.
-- **`submit --check`:** runs the preflight job first and only submits if the env exists,
-  the cwd resolves, and the git commit matches your local checkout. One command, a few
-  extra seconds.
+- **`submit --check`:** runs the preflight job first and then submits if the env exists,
+  the cwd resolves, and the git commit matches your local checkout. It is a gate, not a
+  dry run: when the checks pass, the job goes in. `--dry-run` is the only option that
+  never submits.
 - **Cache hint:** preflight results are cached under `~/.local/share/baircondor/`; if a
   later submit names an env that wasn't in the machine's cached list, you get a soft
   "as of <time>" warning but the submission proceeds (the cache never blocks anything).
+
+</details>
+
+<details>
+<summary><b>Repo config and profiles</b></summary>
+
+A committed `.baircondor.yaml` at the repo root (found from the cwd up to the git root)
+carries the launch recipe with the code, so nobody retypes `--machine --scratch
+--conda-env --conda-base --mem` from memory. It uses the same keys as the personal config,
+plus named `profiles` for the different job types in one repo:
+
+```yaml
+defaults:
+  scratch: /REDLRADADM35839/home/${USER}/condor-scratch
+profiles:
+  pretrain:
+    machine: REDLRADADM35840
+    gpus: 2
+    cpus: 8
+    mem: 256G
+    conda_env: eeg2025
+    conda_base: /home/${USER}/anaconda3
+  eval:
+    machine: REDLRADADM35839
+    gpus: 1
+    cpus: 8
+    mem: 64G
+    conda_env: laya_env
+    conda_base: /home/${USER}/anaconda3
+    sub_lines: ['require_gpus = DeviceUuid != "39392cfc-7c48-a4b3-5332-fddf2228a262"']
+```
+
+```bash
+baircondor profiles                                   # list them, values resolved
+baircondor submit --profile eval -- bash benchmarking/phase_x.sh
+baircondor submit --profile eval --mem 96G -- ...     # explicit flags still win
+```
+
+Precedence: CLI flags > `.baircondor.yaml` > personal config (`~/.config/baircondor/config.yaml`,
+or `--config PATH`) > built-in defaults. `${USER}` and `~` expand in the repo file. The
+profile name is recorded in `meta.json` and logged at submit time. From Python:
+`CondorConfig.from_profile("eval", mem="96G")`.
+
+</details>
+
+<details>
+<summary><b>GPU cap audit</b></summary>
+
+The lab rule is 3 GPUs per user per server, counting condor jobs and direct processes.
+`baircondor gpus` joins `nvidia-smi` (with process owners) and condor's slot claims on GPU
+UUID, so neither kind of use is missed, and adds your idle jobs still in the queue:
+
+```
+$ baircondor gpus --need 1
+redlradadm23589  (8 GPUs, condor manages idx 4,5,6,7)
+idx  uuid      state    owner         via
+0    9e145a8a  free                   direct only
+1    83a62fe3  busy     mbrown        direct pid 5116 (llama-server)
+...
+7    20a7abae  free                   condor
+you hold 0 direct + 0 condor + 0 idle-in-queue = 0 of 3
+free for you: idx 0 (direct only), idx 2 (direct only), ..., idx 7 (condor)
+ok to take 1 (would be 1 of 3)
+```
+
+`--machine NAME` audits an exec node (condor claims only, which is complete there since
+exec nodes are not SSH-able). Exit status 1 means taking `--need N` more would exceed the
+cap. `--json` for scripts. Pin direct runs to the free indices with `CUDA_VISIBLE_DEVICES`.
+
+</details>
+
+<details>
+<summary><b>Waiting and chaining</b></summary>
+
+```bash
+baircondor wait                 # block until your last job leaves the queue
+baircondor wait 1290245         # or a specific cluster id
+baircondor submit --after 1290245 --profile eval -- bash phase_evals.sh
+```
+
+`wait` exits 0 on a clean finish, with the job's exit code on failure, 3 if the job is
+held (it prints `HoldReason` and leaves the job alone), 4 if removed, 2 if the cluster is
+unknown, 5 on `--timeout`. It does not treat one empty `condor_q` answer as an exit; the
+schedd blips, so it waits for a `condor_history` record.
+
+`--after CLUSTER` waits the same way on the submit host and then submits; if the earlier
+job did not finish with exit 0, nothing is submitted. It blocks the shell, so run long
+chains under `nohup`.
+
+**Extra submit lines.** `--sub-line 'key = value'` (repeatable) appends verbatim lines
+to `job.sub`, for example to steer clear of a faulty GPU:
+
+```bash
+baircondor submit --gpus 1 --sub-line 'require_gpus = DeviceUuid != "39392cfc-7c48-a4b3-5332-fddf2228a262"' -- python eval.py
+```
 
 </details>
 
@@ -223,8 +328,13 @@ All flags work for both `submit` and `interactive`:
 | `--pin-submit-host` | `true` | Pin job to this server |
 | `--no-pin-submit-host` | | Let condor schedule on any eligible host |
 | `--machine NAME` | *(omitted)* | Pin to a specific host by name; wins over submit-host pinning |
-| `--dry-run` | `false` | Generate files only; don't submit |
-| `--config PATH` | `~/.config/baircondor/config.yaml` | Config file override |
+| `--profile NAME` | *(omitted)* | Fill unset flags from this profile in the repo's `.baircondor.yaml` |
+| `--sub-line 'K = V'` | *(omitted)* | Extra line appended verbatim to `job.sub`; repeatable |
+| `--dry-run` | `false` | Generate files only; don't submit (the only no-submit option) |
+| `--config PATH` | `~/.config/baircondor/config.yaml` | Personal config file override |
+
+`submit` only: `--check` (preflight the target, then submit if it passes), `--after CLUSTER`
+(wait for that job to succeed, then submit), `--after-interval SECS`.
 
 </details>
 
@@ -251,7 +361,8 @@ conda:
   conda_base: null    # auto-detected if omitted
 ```
 
-CLI flags always override the config file.
+CLI flags always override the config file, and a repo's `.baircondor.yaml` overrides
+this personal file (see "Repo config and profiles").
 
 </details>
 
@@ -280,6 +391,8 @@ run_dir = submit(["python", "train.py"], condor=config.condor)
 ```
 
 See `examples/python_api_patterns.py` for sweep and self-submit patterns.
+`CondorConfig.from_profile("eval", mem="96G")` builds a config from the repo's
+`.baircondor.yaml`; keyword overrides win like CLI flags.
 
 </details>
 
@@ -296,6 +409,19 @@ To reproduce locally:
 ```bash
 bash $(baircondor last)/run.sh -- python train.py --lr 1e-4
 ```
+
+</details>
+
+<details>
+<summary><b>Using baircondor from Claude Code or Codex</b></summary>
+
+[`AGENTS.md`](AGENTS.md) has the rules an agent must follow here: the 3-GPU cap and the
+audit to paste before launching, what submits and what does not, the shared-path rule for
+exec nodes, how to wait on and debug jobs, and when to ask instead of spending compute.
+`baircondor install-skill` symlinks the bundled skill into `~/.claude/skills` and
+`~/.codex/skills` so both tools load the short form on demand.
+[`examples/AGENTS.template.md`](examples/AGENTS.template.md) is the cluster section to
+paste into your own experiment repo, next to a committed `.baircondor.yaml`.
 
 </details>
 

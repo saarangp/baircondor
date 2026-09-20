@@ -15,6 +15,7 @@ def write_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool = True,
     machine: str | None = None,
+    extra_lines: list[str] | None = None,
 ) -> Path:
     path = run_dir / "job.sub"
     path.write_text(
@@ -27,6 +28,7 @@ def write_job_sub(
             pin_submit_host,
             omit_gpus_when_zero,
             machine,
+            extra_lines,
         )
     )
     return path
@@ -51,8 +53,8 @@ def _render_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool,
     machine: str | None,
+    extra_lines: list[str] | None = None,
 ) -> str:
-    run_dir / "run.sh"
     lines = [
         "universe = vanilla",
         f"initialdir = {repo_dir}",
@@ -84,8 +86,19 @@ def _render_job_sub(
         lines.append(f"request_disk = {resources['disk']}")
 
     lines.append(f'+JobBatchName = "{jobname}"')
+    # --sub-line / profile sub_lines: verbatim submit-description lines, e.g.
+    # require_gpus = DeviceUuid != "..." to steer clear of a faulty GPU.
+    for line in extra_lines or []:
+        lines.append(validate_sub_line(line))
     lines.append("")  # trailing newline
     return "\n".join(lines)
+
+
+def validate_sub_line(line: str) -> str:
+    line = line.strip()
+    if "\n" in line or "\r" in line or "=" not in line or line.startswith("="):
+        raise ValueError(f"--sub-line must look like 'key = value' on one line, got: {line!r}")
+    return line
 
 
 def _render_run_sh(
