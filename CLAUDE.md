@@ -1,81 +1,56 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+@AGENTS.md
 
-## Project Overview
+This file is for working on the baircondor code itself. `AGENTS.md` (imported above) is
+for using baircondor to run experiments; it applies here too.
 
-`baircondor` is a Python CLI tool that wraps `condor_submit` to standardize HTCondor job submission for ~20 lab users across multiple GPU servers. Each server has its own schedd; users SSH into their target server and submit there.
+## Project overview
 
-Two subcommands:
-- `baircondor submit` — non-interactive batch job submission
-- `baircondor interactive` — interactive shell allocation via `condor_submit -interactive`
-
-## Architecture
+`baircondor` wraps `condor_submit` for the lab's GPU servers: a run dir per submission
+(`job.sub`, `run.sh`, `meta.json`, logs), a personal config plus a committed per-repo
+config with named profiles, machine pinning, preflight checks, a GPU cap audit, a
+hold-aware `wait`, a history browser, and a Python API.
 
 ```
 baircondor/
-  cli.py        — argparse entrypoint; dispatches to submit/interactive handlers
-  submit.py     — core logic: run dir creation, file generation, condor_submit invocation
-  config.py     — YAML config loading, built-in defaults, CLI flag override merging
-  templates.py  — generates job.sub and run.sh content
-  meta.py       — generates meta.json (resources, git info, timestamps)
-tests/
-  test_rundir.py    — run dir naming and creation
-  test_jobsub.py    — job.sub field validation
-  test_meta.py      — meta.json key validation
-pyproject.toml
-spec.md         — full v1 specification (source of truth for behavior)
+  cli.py        argparse entrypoint; one subparser per subcommand
+  submit.py     run dir creation, file generation, condor_submit; --check, --after
+  config.py     defaults < ~/.config/baircondor/config.yaml < .baircondor.yaml; profiles
+  templates.py  job.sub and run.sh renderers (extra_lines for --sub-line)
+  meta.py       meta.json (resources, conda, profile, git)
+  preflight.py  CPU-only report job on a target machine; --check gate; env cache
+  gpus.py       GPU audit: nvidia-smi + ps joined with condor slot claims
+  wait.py       block on a cluster id; held/removed/blip handling
+  history.py    ~/.local/share/baircondor/history.jsonl; condor_q status lookup
+  tui.py        textual browser behind `history` (TTY only)
+  setup.py      first-run wizard
+  skill.py      installs skills/baircondor/SKILL.md for Claude Code and Codex
+  api.py        CondorConfig (pydantic), submit(), interactive()
+  console.py    shared stderr console and log()
+tests/          one file per module; parsers are tested on canned command output
 ```
 
-## Key Design Decisions
+## Design decisions
 
-**Run directory layout:**
-```
-{scratch}/{runs_subdir}/{user}/{jobname}/{YYYYMMDD_HHMMSS}_{shortid}/
-  job.sub       condor submit description
-  run.sh        wrapper script (executable); actual condor executable
-  meta.json     reproducibility metadata
-  stdout.txt    condor stdout
-  stderr.txt    condor stderr
-  condor.log    condor event log
-```
+- `initialdir` is the cwd at submit time; `executable = /bin/bash`,
+  `arguments = <run.sh> -- <command>`. `run.sh` exports `BAIRCONDOR_*`, activates conda
+  (base resolved on the execute host), then `exec "$@"`.
+- Precedence: CLI flags > `.baircondor.yaml` profile/defaults > personal config (or
+  `--config PATH`) > built-in defaults. `${USER}` and `~` expand in the repo file.
+- `--check` submits if the checks pass. `--dry-run` is the only no-submit option.
+- `wait` treats an empty `condor_q` as an exit only after a `condor_history` record;
+  held jobs return exit 3 and are never released or resubmitted by the tool.
+- No `transfer_input_files`, no Docker, no retries, no DAGs.
 
-**job.sub:** `initialdir` is set to `repo_dir` (cwd at invocation), so relative paths work like interactive runs. `executable = /bin/bash`, `arguments = <abs_path_run.sh> -- <command...>`. `request_gpus` is omitted when `--gpus 0` (controlled by `condor.omit_request_gpus_when_zero`, default true).
-
-**run.sh:** Sets `set -euo pipefail`, exports `BAIRCONDOR_*` env vars, optionally activates conda, then `exec "$@"`.
-
-**Config search order:** `--config PATH` > `~/.config/baircondor/config.yaml` > built-in defaults. CLI flags always win.
-
-**Memory defaults (v1):** No per-GPU scaling — single string defaults (`mem_gpu = "24G"`, `mem_cpu_only = "8G"`). Memory strings are passed through verbatim.
-
-**CPU defaults:** `cpus = gpus * cpus_per_gpu` (default 4 per GPU) or `cpus_cpu_only` (default 4) when `--gpus 0`.
-
-**No v1 features:** No `transfer_input_files`, no `requirements` expressions, no Docker, no retry logic, no sweep/array abstraction.
-
-## Dependencies
-
-- `pyyaml` — config file parsing
-- `pytest` — tests (dev only)
-- Python 3.11+
-
-## Dev Commands
+## Dev commands
 
 ```bash
-pip install -e ".[dev]"    # install with dev deps
-pytest tests/              # run all tests
-pytest tests/test_jobsub.py -v  # run specific test file
-
-# smoke test (dry run, no condor needed)
-baircondor submit --gpus 0 --dry-run -- echo hello
+pip install -e ".[dev]"
+pytest tests/ -v
+baircondor submit --gpus 0 --dry-run -- echo hello     # smoke test, no condor needed
+pre-commit install                                      # autoflake, isort, black
 ```
 
-## General Instructions
-- Please use the AskUserQuestion liberally to understand intent and plan carefully
-- avoid "slop code" (unnecessary functions, functions inside functions, unnecessary checks)
-- respect the pre-commit hooks
-- run tests if they exist after changes, write new ones and then run before making any changes if they dont!
-
-## Tool Preferences
-- Prefer serena MCP tools (find_symbol, get_symbols_overview, replace_symbol_body, etc.) over Read/Grep/Edit for navigating and modifying Python code. Serena understands symbol structure and avoids reading entire files unnecessarily, saving tokens.
-- Use serena's onboarding/check_onboarding_performed at session start for unfamiliar parts of the codebase.
-- Fall back to Read/Grep/Edit for non-Python files, config files, docs, and when serena tools are unavailable. 
+Keep changes small and direct; no speculative guards or wrappers. Run the tests after
+every change and add one for each new behavior. Write docs in plain English.

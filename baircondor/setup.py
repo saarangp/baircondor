@@ -52,7 +52,7 @@ def run_wizard(config_path: Path) -> bool:
 
     from .config import _autodetect_conda_base
 
-    console = Console(stderr=True)
+    console = Console(stderr=True, soft_wrap=True)
     console.print(
         Panel(
             "[bold]baircondor first-time setup[/bold]\n"

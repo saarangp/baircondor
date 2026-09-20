@@ -16,6 +16,7 @@ def write_job_sub(
     omit_gpus_when_zero: bool = True,
     machine: str | None = None,
     require_gpus: str | None = None,
+    extra_lines: list[str] | None = None,
 ) -> Path:
     path = run_dir / "job.sub"
     path.write_text(
@@ -29,6 +30,7 @@ def write_job_sub(
             omit_gpus_when_zero,
             machine,
             require_gpus,
+            extra_lines,
         )
     )
     return path
@@ -54,8 +56,8 @@ def _render_job_sub(
     omit_gpus_when_zero: bool,
     machine: str | None,
     require_gpus: str | None = None,
+    extra_lines: list[str] | None = None,
 ) -> str:
-    run_dir / "run.sh"
     lines = [
         "universe = vanilla",
         f"initialdir = {repo_dir}",
@@ -80,7 +82,7 @@ def _render_job_sub(
     gpus = resources["gpus"]
     if gpus > 0:
         lines.append(f"request_gpus = {gpus}")
-        if require_gpus:
+        if require_gpus:  # per-machine exclusion from condor.require_gpus in config.yaml
             lines.append(f"require_gpus = {require_gpus}")
     elif not omit_gpus_when_zero:
         lines.append("request_gpus = 0")
@@ -89,8 +91,17 @@ def _render_job_sub(
         lines.append(f"request_disk = {resources['disk']}")
 
     lines.append(f'+JobBatchName = "{jobname}"')
+    for line in extra_lines or []:
+        lines.append(validate_sub_line(line))
     lines.append("")  # trailing newline
     return "\n".join(lines)
+
+
+def validate_sub_line(line: str) -> str:
+    line = line.strip()
+    if "\n" in line or "\r" in line or "=" not in line or line.startswith("="):
+        raise ValueError(f"--sub-line must look like 'key = value' on one line, got: {line!r}")
+    return line
 
 
 def _render_run_sh(

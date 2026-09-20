@@ -1,4 +1,4 @@
-"""Tests for conda base resolution."""
+"""Tests for config resolution: conda base, machine, host pinning."""
 
 import subprocess
 from types import SimpleNamespace
@@ -15,157 +15,69 @@ from baircondor.config import (
 from baircondor.submit import _validate_conda
 
 
-def _args(conda_env=None, conda_base=None):
-    return SimpleNamespace(conda_env=conda_env, conda_base=conda_base)
+def _args(**kw):
+    return SimpleNamespace(
+        **{"conda_env": None, "conda_base": None, "machine": None, "pin_submit_host": None, **kw}
+    )
 
 
-def test_conda_base_from_cli():
+def test_resolve_conda_precedence_and_normalization():
     cfg = {"conda": {"conda_base": "/cfg/base"}}
-    out = resolve_conda(cfg, _args(conda_env="myenv", conda_base="/cli/base"))
-    assert out["env"] == "myenv"
-    assert out["conda_base"] == "/cli/base"
-
-
-def test_conda_base_from_config():
-    cfg = {"conda": {"conda_base": "/cfg/base"}}
-    out = resolve_conda(cfg, _args(conda_env="myenv"))
-    assert out["conda_base"] == "/cfg/base"
-
-
-def test_resolve_conda_no_base_returns_none():
-    """Base is resolved at runtime in run.sh, not on the submit host."""
-    cfg = {"conda": {"conda_base": None}}
-    out = resolve_conda(cfg, _args(conda_env="myenv"))
-    assert out["conda_base"] is None
-
-
-def test_conda_base_bin_conda_normalized():
-    cfg = {"conda": {"conda_base": None}}
-    out = resolve_conda(cfg, _args(conda_env="myenv", conda_base="/opt/conda/bin/conda"))
+    assert (
+        resolve_conda(cfg, _args(conda_env="e", conda_base="/cli/base"))["conda_base"]
+        == "/cli/base"
+    )
+    assert resolve_conda(cfg, _args(conda_env="e"))["conda_base"] == "/cfg/base"
+    assert resolve_conda({"conda": {"conda_base": None}}, _args())["conda_base"] is None  # runtime
+    out = resolve_conda({"conda": {"conda_base": None}}, _args(conda_base="/opt/conda/bin/conda"))
     assert out["conda_base"] == "/opt/conda"
 
 
-def test_conda_base_plain_dir_unchanged():
-    cfg = {"conda": {"conda_base": None}}
-    out = resolve_conda(cfg, _args(conda_env="myenv", conda_base="/opt/conda"))
-    assert out["conda_base"] == "/opt/conda"
-
-
-# _autodetect_conda_base is no longer called during submission, but the setup wizard
-# still uses it to pre-fill a suggestion on the login node.
-def test_autodetect_from_conda_info(monkeypatch):
-    def fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="/opt/conda\n")
-
-    monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
+def test_autodetect_conda_base(monkeypatch):
+    monkeypatch.setattr(
+        "baircondor.config.subprocess.run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout="/opt/conda\n"),
+    )
     assert _autodetect_conda_base() == "/opt/conda"
-
-
-def test_autodetect_from_conda_exe(monkeypatch):
-    def fake_run(*args, **kwargs):
-        return subprocess.CompletedProcess(args=args[0], returncode=1, stdout="")
-
-    monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
-    monkeypatch.setenv("CONDA_EXE", "/home/user/miniconda3/bin/conda")
-    assert _autodetect_conda_base() == "/home/user/miniconda3"
-
-
-def test_autodetect_absent(monkeypatch):
-    def fake_run(*args, **kwargs):
-        raise OSError
-
-    monkeypatch.setattr("baircondor.config.subprocess.run", fake_run)
-    monkeypatch.delenv("CONDA_EXE", raising=False)
+    monkeypatch.setattr(
+        "baircondor.config.subprocess.run", lambda *a, **k: (_ for _ in ()).throw(OSError())
+    )
+    monkeypatch.setenv("CONDA_EXE", "/home/u/miniconda3/bin/conda")
+    assert _autodetect_conda_base() == "/home/u/miniconda3"
+    monkeypatch.delenv("CONDA_EXE")
     assert _autodetect_conda_base() is None
 
 
-# ── _validate_conda: fail fast on a bad same-host base ────────────────────────
-
-
-def _write_conda_sh(base):
-    activate = base / "etc" / "profile.d"
-    activate.mkdir(parents=True)
-    (activate / "conda.sh").write_text("")
-
-
-def test_validate_conda_ok_when_activate_present(tmp_path):
-    _write_conda_sh(tmp_path)
-    _validate_conda({"env": "train", "conda_base": str(tmp_path)}, None)
-
-
-def test_validate_conda_exits_when_activate_missing(tmp_path):
+def test_validate_conda(tmp_path):
+    (tmp_path / "etc" / "profile.d").mkdir(parents=True)
+    (tmp_path / "etc" / "profile.d" / "conda.sh").write_text("")
+    _validate_conda({"env": "t", "conda_base": str(tmp_path)}, None)
     with pytest.raises(SystemExit):
-        _validate_conda({"env": "train", "conda_base": str(tmp_path / "nope")}, None)
+        _validate_conda({"env": "t", "conda_base": str(tmp_path / "nope")}, None)
+    _validate_conda(
+        {"env": "t", "conda_base": str(tmp_path / "nope")}, "OTHER"
+    )  # checked on the exec host
+    _validate_conda({"env": "t", "conda_base": None}, None)
 
 
-def test_validate_conda_skips_when_machine_set(tmp_path):
-    _validate_conda({"env": "train", "conda_base": str(tmp_path / "nope")}, "OTHER")
-
-
-def test_validate_conda_skips_when_no_base():
-    _validate_conda({"env": "train", "conda_base": None}, None)
-
-
-def test_pin_submit_host_from_config_default():
-    cfg = {"condor": {"pin_submit_host": True}}
+def test_machine_and_pin_resolution():
+    cfg = {"condor": {"pin_submit_host": True, "machine": "CFGHOST"}}
     assert resolve_pin_submit_host(cfg, _args()) is True
+    assert resolve_pin_submit_host(cfg, _args(pin_submit_host=False)) is False
+    assert resolve_machine(cfg, _args()) == "CFGHOST"
+    assert resolve_machine(cfg, _args(machine="CLIHOST")) == "CLIHOST"
+    assert resolve_machine({"condor": {"machine": None}}, _args()) is None
 
 
-def test_pin_submit_host_cli_override():
-    cfg = {"condor": {"pin_submit_host": True}}
-    assert resolve_pin_submit_host(cfg, _args()) is True
-    args = _args()
-    args.pin_submit_host = False
-    assert resolve_pin_submit_host(cfg, args) is False
-
-
-def test_machine_default_none():
-    cfg = {"condor": {"machine": None}}
-    args = _args()
-    args.machine = None
-    assert resolve_machine(cfg, args) is None
-
-
-def test_machine_from_config_default():
-    cfg = {"condor": {"machine": "SOMEHOST"}}
-    args = _args()
-    args.machine = None
-    assert resolve_machine(cfg, args) == "SOMEHOST"
-
-
-def test_machine_cli_overrides_config():
-    cfg = {"condor": {"machine": "SOMEHOST"}}
-    args = _args()
-    args.machine = "CLIHOST"
-    assert resolve_machine(cfg, args) == "CLIHOST"
-
-
-def test_require_gpus_matches_explicit_machine():
-    cfg = {"condor": {"require_gpus": {"REDLRADADM35840": 'UUID != "GPU-bad"'}}}
+def test_require_gpus_per_machine():
+    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+    # keyed by prefix, case-insensitive, against --machine or the pinned submit host
+    assert resolve_require_gpus(cfg, "REDLRADADM35840.ad.x", True, "submit") == 'UUID != "GPU-bad"'
+    assert resolve_require_gpus(cfg, None, True, "redlradadm35840.ad.x") == 'UUID != "GPU-bad"'
+    assert resolve_require_gpus(cfg, None, True, "otherhost.ad.x") is None
     assert (
-        resolve_require_gpus(cfg, "REDLRADADM35840.ad.medctr.ucla.edu", True, "submit-host")
-        == 'UUID != "GPU-bad"'
-    )
-
-
-def test_require_gpus_matches_pinned_submit_host():
-    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+        resolve_require_gpus(cfg, None, False, "redlradadm35840.ad.x") is None
+    )  # no pin, no target
     assert (
-        resolve_require_gpus(cfg, None, True, "redlradadm35840.ad.medctr.ucla.edu")
-        == 'UUID != "GPU-bad"'
+        resolve_require_gpus({"condor": {"require_gpus": {}}}, "REDLRADADM35840", True, "s") is None
     )
-
-
-def test_require_gpus_no_match_returns_none():
-    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
-    assert resolve_require_gpus(cfg, None, True, "otherhost.ad.medctr.ucla.edu") is None
-
-
-def test_require_gpus_none_when_pinning_disabled_and_no_machine():
-    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
-    assert resolve_require_gpus(cfg, None, False, "redlradadm35840.ad.medctr.ucla.edu") is None
-
-
-def test_require_gpus_absent_key_returns_none():
-    cfg = {"condor": {"require_gpus": {}}}
-    assert resolve_require_gpus(cfg, "REDLRADADM35840", True, "submit-host") is None

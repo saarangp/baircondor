@@ -11,29 +11,24 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from rich.console import Console
 from rich.markup import escape
 
 from .config import (
+    fill_unset,
     get_user,
     load_config,
     resolve_conda,
     resolve_machine,
     resolve_pin_submit_host,
+    resolve_profile,
     resolve_require_gpus,
     resolve_resources,
 )
+from .console import console as _console
+from .console import log as _log
 from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
-
-_console = Console(stderr=True)
-_PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
-
-
-def _log(msg: str, quiet: bool) -> None:
-    if not quiet:
-        _console.print(f"{_PREFIX} {msg}")
 
 
 def _get_submit_host() -> str:
@@ -42,11 +37,15 @@ def _get_submit_host() -> str:
 
 
 def run_submit(args) -> Path:
-    cfg = load_config(getattr(args, "config", None))
-    resources = resolve_resources(cfg, args)
-    conda = resolve_conda(cfg, args)
-    pin_submit_host = resolve_pin_submit_host(cfg, args)
-    machine = resolve_machine(cfg, args)
+    r = _resolve(args)
+    cfg, resources, conda, pin_submit_host, machine = (
+        r["cfg"],
+        r["resources"],
+        r["conda"],
+        r["pin"],
+        r["machine"],
+    )
+    sub_lines, profile, quiet, repo_dir = r["sub_lines"], r["profile"], r["quiet"], r["repo_dir"]
 
     # strip leading "--" separator that argparse REMAINDER captures
     command = args.command
@@ -55,7 +54,6 @@ def run_submit(args) -> Path:
     if not command:
         sys.exit("error: a command is required after --")
 
-    repo_dir = Path.cwd()
     submit_host = _get_submit_host()
     user = get_user()
     jobname = args.jobname or repo_dir.name
@@ -72,8 +70,6 @@ def run_submit(args) -> Path:
 
     _validate_conda(conda, machine)
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
-
-    quiet = getattr(args, "quiet", False)
 
     if getattr(args, "check", False):
         if not machine:
@@ -96,8 +92,6 @@ def run_submit(args) -> Path:
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
 
-    require_gpus = resolve_require_gpus(cfg, machine, pin_submit_host, submit_host)
-
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
     _log("📝 Generated run.sh", quiet)
     write_job_sub(
@@ -109,10 +103,11 @@ def run_submit(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
-        require_gpus=require_gpus,
+        require_gpus=resolve_require_gpus(cfg, machine, pin_submit_host, submit_host),
+        extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)
-    write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda)
+    write_meta(run_dir, repo_dir, jobname, "batch", command, resources, conda, profile=profile)
     _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"
@@ -129,19 +124,23 @@ def run_submit(args) -> Path:
         gpus=resources["gpus"],
         command=command,
         user=user,
+        after=getattr(args, "after", None),
     )
 
     return run_dir
 
 
 def run_interactive(args) -> Path:
-    cfg = load_config(getattr(args, "config", None))
-    resources = resolve_resources(cfg, args)
-    conda = resolve_conda(cfg, args)
-    pin_submit_host = resolve_pin_submit_host(cfg, args)
-    machine = resolve_machine(cfg, args)
+    r = _resolve(args)
+    cfg, resources, conda, pin_submit_host, machine = (
+        r["cfg"],
+        r["resources"],
+        r["conda"],
+        r["pin"],
+        r["machine"],
+    )
+    sub_lines, profile, quiet, repo_dir = r["sub_lines"], r["profile"], r["quiet"], r["repo_dir"]
 
-    repo_dir = Path.cwd()
     submit_host = _get_submit_host()
     user = get_user()
     jobname = args.jobname or "interactive"
@@ -159,11 +158,8 @@ def run_interactive(args) -> Path:
     _validate_conda(conda, machine)
     _warn_unshared_paths(machine, submit_host, {"cwd": str(repo_dir), "--scratch": scratch})
 
-    quiet = getattr(args, "quiet", False)
     run_dir.mkdir(parents=True, exist_ok=False)
     _log(f"📁 Created run dir: {run_dir}", quiet)
-
-    require_gpus = resolve_require_gpus(cfg, machine, pin_submit_host, submit_host)
 
     command = ["/bin/bash", "-i"]
     run_sh = write_run_sh(run_dir, repo_dir, jobname, resources, conda)
@@ -177,10 +173,13 @@ def run_interactive(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
-        require_gpus=require_gpus,
+        require_gpus=resolve_require_gpus(cfg, machine, pin_submit_host, submit_host),
+        extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)
-    write_meta(run_dir, repo_dir, jobname, "interactive", command, resources, conda)
+    write_meta(
+        run_dir, repo_dir, jobname, "interactive", command, resources, conda, profile=profile
+    )
     _log("📝 Generated meta.json", quiet)
 
     job_sub = run_dir / "job.sub"
@@ -200,6 +199,30 @@ def run_interactive(args) -> Path:
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _resolve(args) -> dict:
+    """Config, profile, and resource resolution shared by submit and interactive."""
+    repo_dir = Path.cwd()
+    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
+    quiet = getattr(args, "quiet", False)
+    profile = getattr(args, "profile", None)
+    values = resolve_profile(cfg, profile)
+    if profile:
+        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
+    fill_unset(args, {k: v for k, v in values.items() if k != "sub_lines"})
+    sub_lines = list(values.get("sub_lines") or []) + list(getattr(args, "sub_lines", None) or [])
+    return {
+        "cfg": cfg,
+        "resources": resolve_resources(cfg, args),
+        "conda": resolve_conda(cfg, args),
+        "pin": resolve_pin_submit_host(cfg, args),
+        "machine": resolve_machine(cfg, args),
+        "sub_lines": sub_lines,
+        "profile": profile,
+        "quiet": quiet,
+        "repo_dir": repo_dir,
+    }
 
 
 def _make_run_dir(
@@ -305,6 +328,7 @@ def _submit(
     gpus: int = 0,
     command: list[str] | None = None,
     user: str = "",
+    after: str | None = None,
 ) -> None:
     cmd = ["condor_submit", str(job_sub)]
     _log(f"🗂️  Repo dir : {repo_dir}", quiet)
@@ -317,6 +341,13 @@ def _submit(
     if dry_run:
         _log(f"🧪 [dry-run] would run: {' '.join(cmd)}", quiet)
         return
+
+    if after:
+        from .wait import wait_for_cluster
+
+        _log(f"⏳ --after {after}: waiting for that job to finish before submitting", quiet)
+        if wait_for_cluster(after) != 0:
+            sys.exit(f"error: --after {after}: that job did not finish cleanly; not submitting")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.stdout:

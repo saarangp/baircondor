@@ -6,12 +6,13 @@ import argparse
 import sys
 from pathlib import Path
 
+import yaml
 from rich.console import Console
 
 from .config import CONFIG_PATH, get_user
 from .submit import run_interactive, run_submit
 
-_console = Console(stderr=True)
+_console = Console(stderr=True, soft_wrap=True)
 
 
 def main() -> None:
@@ -27,8 +28,12 @@ def main() -> None:
     _add_preflight_parser(sub)
     _add_history_parser(sub)
     _add_last_parser(sub)
+    _add_gpus_parser(sub)
+    _add_wait_parser(sub)
+    sub.add_parser("profiles", help="List the profiles in this repo's .baircondor.yaml.")
     sub.add_parser("config", help="Print the config file path.")
     sub.add_parser("setup", help="Re-run the setup wizard.")
+    _add_install_skill_parser(sub)
 
     args = parser.parse_args()
 
@@ -46,6 +51,20 @@ def main() -> None:
         _cmd_history(args)
     elif args.subcommand == "last":
         _cmd_last(args)
+    elif args.subcommand == "gpus":
+        from .gpus import run_gpus
+
+        _run_clean(run_gpus, args)
+    elif args.subcommand == "wait":
+        from .wait import run_wait
+
+        _run_clean(run_wait, args)
+    elif args.subcommand == "profiles":
+        _run_clean(_cmd_profiles, args)
+    elif args.subcommand == "install-skill":
+        from .skill import run_install_skill
+
+        _run_clean(run_install_skill, args)
     elif args.subcommand == "config":
         print(CONFIG_PATH)
     elif args.subcommand == "setup":
@@ -164,6 +183,20 @@ def _cmd_last(args) -> None:
         print(d)
 
 
+def _cmd_profiles(args) -> None:
+    from .config import REPO_CONFIG_NAME, load_config
+
+    cfg = load_config(getattr(args, "config", None))
+    if not cfg.get("repo_config"):
+        sys.exit(f"No {REPO_CONFIG_NAME} found from {Path.cwd()} up to the git root.")
+    print(f"# {cfg['repo_config']}")
+    profiles = cfg.get("profiles") or {}
+    if not profiles:
+        print("(no profiles defined)")
+        return
+    print(yaml.safe_dump(profiles, default_flow_style=False, sort_keys=False), end="")
+
+
 def _status_style(status: str) -> str:
     from .history import STATUS_COLORS
 
@@ -190,7 +223,7 @@ def _common_args(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--gpus",
         type=int,
-        default=1,
+        default=None,
         metavar="N",
         help="Number of GPUs to request. Use 0 for CPU-only jobs. Default: 1.",
     )
@@ -269,10 +302,25 @@ def _common_args(p: argparse.ArgumentParser) -> None:
         help="Allow condor to schedule the job on any eligible host.",
     )
     p.add_argument(
+        "--profile",
+        metavar="NAME",
+        help="Fill unset flags from this profile in the repo's .baircondor.yaml "
+        "(found from the cwd up to the git root). Flags you pass explicitly still win. "
+        "See `baircondor profiles`.",
+    )
+    p.add_argument(
+        "--sub-line",
+        dest="sub_lines",
+        action="append",
+        metavar="'KEY = VALUE'",
+        help="Extra line appended verbatim to job.sub; repeatable. Example: "
+        "--sub-line 'require_gpus = DeviceUuid != \"39392cfc-...\"' to avoid a faulty GPU.",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Generate run dir and files but do not call condor_submit. "
-        "Useful for checking job.sub before submitting.",
+        "The only option that never submits.",
     )
     p.add_argument(
         "--quiet",
@@ -289,9 +337,17 @@ def _add_submit_parser(sub) -> None:
     p.add_argument(
         "--check",
         action="store_true",
-        help="Run a preflight job on the --machine target first and abort before submitting "
-        "if the conda env is missing there, the cwd doesn't resolve, or its git commit "
-        "differs from your local checkout.",
+        help="Run a preflight job on the --machine target first, then SUBMIT if it passes. "
+        "Aborts only if the conda env is missing there, the cwd doesn't resolve, or its git "
+        "commit differs from your local checkout. This is a gate, not a dry run; use "
+        "--dry-run to generate files without submitting.",
+    )
+    p.add_argument(
+        "--after",
+        metavar="CLUSTER",
+        help="Wait (on this host) until condor cluster CLUSTER finishes with exit 0, then "
+        "submit. If it is held, removed, or fails, nothing is submitted. Blocks the shell; "
+        "run under nohup for long chains.",
     )
     p.add_argument(
         "command",
@@ -340,6 +396,12 @@ def _add_preflight_parser(sub) -> None:
         help="Subdirectory under scratch for all runs (default: condor-runs).",
     )
     p.add_argument(
+        "--conda-env",
+        metavar="ENVNAME",
+        help="Also require this conda env to exist on the machine; exit non-zero with the "
+        "env list if it does not.",
+    )
+    p.add_argument(
         "--timeout",
         type=int,
         default=300,
@@ -376,6 +438,71 @@ def _add_history_parser(sub) -> None:
         "--verbose",
         action="store_true",
         help="Show GPUs and command in addition to the default fields.",
+    )
+
+
+def _add_gpus_parser(sub) -> None:
+    p = sub.add_parser(
+        "gpus",
+        help="Audit GPU usage against the 3-per-server cap: who holds each GPU, via "
+        "condor or a direct process, and how many you could still take.",
+    )
+    p.add_argument(
+        "--machine",
+        metavar="NAME",
+        help="Machine to audit (default: this host). Remote machines show condor claims "
+        "only, which is the full picture there since they are not SSH-able.",
+    )
+    p.add_argument(
+        "--need",
+        type=int,
+        default=1,
+        metavar="N",
+        help="GPUs you intend to take; exit 1 if that would exceed the cap (default: 1).",
+    )
+    p.add_argument("--json", action="store_true", help="Print the audit as JSON.")
+
+
+def _add_wait_parser(sub) -> None:
+    p = sub.add_parser(
+        "wait",
+        help="Block until a condor job leaves the queue. Exit 0 on success, the job's exit "
+        "code on failure, 3 if held (prints HoldReason), 4 if removed, 2 if unknown.",
+    )
+    p.add_argument(
+        "cluster",
+        nargs="?",
+        default="last",
+        metavar="CLUSTER",
+        help="Cluster id, or 'last' for your most recent submission (default).",
+    )
+    p.add_argument(
+        "--interval",
+        type=int,
+        default=30,
+        metavar="SECS",
+        help="Poll interval (default: 30).",
+    )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        metavar="SECS",
+        help="Give up after this many seconds with exit 5 (default: wait forever).",
+    )
+
+
+def _add_install_skill_parser(sub) -> None:
+    p = sub.add_parser(
+        "install-skill",
+        help="Symlink the bundled agent skill into ~/.claude/skills and ~/.codex/skills.",
+    )
+    p.add_argument(
+        "--dir",
+        dest="dirs",
+        action="append",
+        metavar="PATH",
+        help="Skill directory to install into (repeatable). Default: both agents' dirs.",
     )
 
 

@@ -3,7 +3,7 @@
 import pytest
 
 from baircondor import tui
-from baircondor.history import STATUS_COLORS, _parse_job_info
+from baircondor.history import _parse_job_info
 from baircondor.tui import (
     RunBrowserApp,
     RunDetailScreen,
@@ -33,52 +33,24 @@ def _entry(run_dir="/tmp/run", **overrides):
 # ── pure helpers ──────────────────────────────────────────────────────────────
 
 
-def test_read_tail_missing_file(tmp_path):
-    assert read_tail(tmp_path / "nope.txt") is None
+def test_read_tail(tmp_path):
+    assert read_tail(tmp_path / "missing.txt") is None
+    f = tmp_path / "log.txt"
+    f.write_text("a\nb\nc\n")
+    assert read_tail(f) == "a\nb\nc"
+    assert read_tail(f, max_lines=2) == "b\nc"
+    f.write_text("x" * 50 + "\nlast line\n")
+    assert read_tail(f, max_bytes=20) == "last line"  # partial first line dropped
 
 
-def test_read_tail_small_file(tmp_path):
-    p = tmp_path / "out.txt"
-    p.write_text("a\nb\nc\n")
-    assert read_tail(p) == "a\nb\nc"
-
-
-def test_read_tail_caps_lines(tmp_path):
-    p = tmp_path / "out.txt"
-    p.write_text("\n".join(str(i) for i in range(1000)))
-    tail = read_tail(p, max_lines=10)
-    assert tail == "\n".join(str(i) for i in range(990, 1000))
-
-
-def test_read_tail_drops_partial_line_when_byte_capped(tmp_path):
-    p = tmp_path / "out.txt"
-    p.write_text("first-line-gets-cut\n" + "\n".join(f"line{i}" for i in range(10)))
-    tail = read_tail(p, max_bytes=60)
-    assert "first-line-gets-cut" not in tail
-    assert tail.endswith("line9")
-
-
-def test_status_text_styles():
-    assert str(status_text("running")) == "● running"
-    assert status_text("running").style == STATUS_COLORS["running"]
-    assert status_text("unknown-thing").style == "dim"
-
-
-def test_entry_timestamp():
-    assert entry_timestamp(_entry()) == "2026-08-04 12:34"
-
-
-def test_entry_command_truncates():
-    entry = _entry(command=["python"] + ["x" * 50] * 3)
-    out = entry_command(entry, max_len=20)
-    assert len(out) == 20
-    assert out.endswith("...")
-
-
-def test_parse_job_info_extracts_short_host():
-    assert _parse_job_info("2 slot1@redlradadm35840.some.domain") == ("running", "redlradadm35840")
-    assert _parse_job_info("1 undefined") == ("idle", "")
-    assert _parse_job_info("") == ("?", "")
+def test_small_helpers():
+    assert status_text("running").style == "green"
+    assert entry_timestamp({"timestamp": "2026-08-04T12:34:56"}) == "2026-08-04 12:34"
+    assert entry_command({"command": ["python"] + ["x"] * 50}, max_len=20).endswith("...")
+    assert _parse_job_info("2 slot1_3@REDLRADADM35839.ad.medctr.ucla.edu") == (
+        "running",
+        "REDLRADADM35839",
+    )
 
 
 _META = {

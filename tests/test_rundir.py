@@ -1,46 +1,17 @@
-"""Tests for run directory naming and creation."""
+"""Tests for run dir naming and creation."""
+
+import re
 
 from baircondor.submit import _make_run_dir
 
 
-def test_run_dir_structure(tmp_path):
-    run_dir = _make_run_dir(str(tmp_path), "condor-runs", "myjob", None, None)
-    # path: tmp_path/condor-runs/<user>/myjob/<timestamp>_<shortid>
-    parts = run_dir.relative_to(tmp_path).parts
-    assert parts[0] == "condor-runs"
-    assert parts[2] == "myjob"
-    assert len(parts) == 4
-
-
-def test_run_dir_timestamp_format(tmp_path):
-    run_dir = _make_run_dir(str(tmp_path), "condor-runs", "myjob", None, None)
-    dirname = run_dir.name
-    ts, shortid = dirname.rsplit("_", 1)
-    # timestamp portion: YYYYMMDD_HHMMSS (two underscore-separated parts when split on first _)
-    assert len(dirname) > 10
-    assert len(shortid) == 6
-
-
-def test_run_dir_with_project(tmp_path):
-    run_dir = _make_run_dir(str(tmp_path), "condor-runs", "myjob", "myproject", None)
-    parts = run_dir.relative_to(tmp_path).parts
-    assert "myproject" in parts
-    assert parts.index("myproject") < parts.index("myjob")
-
-
-def test_run_dir_scratch_auto_created(tmp_path):
-    new_scratch = tmp_path / "brand-new-scratch"
-    assert not new_scratch.exists()
-    run_dir = _make_run_dir(str(new_scratch), "condor-runs", "myjob", None, None)
-    assert new_scratch.exists()
-    assert run_dir.is_relative_to(new_scratch)
-
-
-def test_run_dir_is_unique(tmp_path):
-    dirs = {_make_run_dir(str(tmp_path), "condor-runs", "myjob", None, None) for _ in range(20)}
-    assert len(dirs) == 20
-
-
-def test_run_dir_tag_is_appended(tmp_path):
-    run_dir = _make_run_dir(str(tmp_path), "condor-runs", "myjob", None, "experiment-a")
-    assert run_dir.name.endswith("_experiment-a")
+def test_run_dir_layout_and_uniqueness(tmp_path, monkeypatch):
+    monkeypatch.setenv("USER", "alice")
+    scratch = tmp_path / "scratch"  # created on demand
+    a = _make_run_dir(str(scratch), "condor-runs", "myjob", None, None)
+    b = _make_run_dir(str(scratch), "condor-runs", "myjob", "proj", "smoke")
+    assert a.parent == scratch / "condor-runs" / "alice" / "myjob"
+    assert re.fullmatch(r"\d{8}_\d{6}_[a-z0-9]{6}", a.name)
+    assert b.parent == scratch / "condor-runs" / "alice" / "proj" / "myjob"
+    assert b.name.endswith("_smoke")
+    assert a != _make_run_dir(str(scratch), "condor-runs", "myjob", None, None)

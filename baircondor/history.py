@@ -19,15 +19,34 @@ STATUS_COLORS = {
     "removed": "dim red",
 }
 
-_STATUS_MAP = {
-    "1": "idle",
-    "2": "running",
-    "3": "removed",
-    "4": "done",
-    "5": "held",
-    "6": "running",  # transferring output
-    "7": "held",  # suspended
+# Raw condor JobStatus codes. The history views collapse a few for display.
+JOB_STATUS = {
+    1: "idle",
+    2: "running",
+    3: "removed",
+    4: "completed",
+    5: "held",
+    6: "transferring",
+    7: "suspended",
 }
+_DISPLAY = {"completed": "done", "transferring": "running", "suspended": "held"}
+_STATUS_MAP = {str(k): _DISPLAY.get(v, v) for k, v in JOB_STATUS.items()}
+
+
+def condor_out(cmd: list[str], timeout: float = 30) -> str:
+    """stdout of a condor/system command, or "" on failure or timeout."""
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def short_host(remote_host: str) -> str:
+    """'slot1_2@host.domain' -> 'host'; '' for undefined."""
+    if not remote_host or remote_host == "undefined":
+        return ""
+    return remote_host.split("@")[-1].split(".")[0]
 
 
 def append_entry(
@@ -122,10 +141,7 @@ def _parse_job_info(line: str) -> tuple[str, str]:
     if not parts:
         return "?", ""
     status = _STATUS_MAP.get(parts[0], "?")
-    host = ""
-    if len(parts) > 1 and parts[1] != "undefined":
-        # RemoteHost looks like slot1@hostname.domain — keep just the short hostname
-        host = parts[1].split("@")[-1].split(".")[0]
+    host = short_host(parts[1]) if len(parts) > 1 else ""
     return status, host
 
 

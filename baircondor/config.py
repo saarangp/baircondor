@@ -1,4 +1,4 @@
-"""Config loading: built-in defaults -> config.yaml -> CLI flags."""
+"""Config loading: built-in defaults -> personal config.yaml -> repo .baircondor.yaml -> CLI flags."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import yaml
 
 DEFAULTS: dict[str, Any] = {
     "defaults": {
+        "gpus": 1,
         "scratch": "~/condor-scratch",
         "runs_subdir": "condor-runs",
         "cpus_per_gpu": 4,  # effectively like num workers per GPU, but also used to compute CPU-only defaults
@@ -32,14 +33,47 @@ DEFAULTS: dict[str, Any] = {
 CONFIG_PATH = Path.home() / ".config" / "baircondor" / "config.yaml"
 _CONFIG_PATH = CONFIG_PATH
 
+# Committed per-repo config, found by walking up from cwd to the git root. Carries the
+# launch recipe (target machine, scratch, conda env, memory) with the code, and named
+# profiles for the different job types in one repo (e.g. pretraining vs evaluation).
+REPO_CONFIG_NAME = ".baircondor.yaml"
+
+# Keys a profile may set: the submit flags, plus extra job.sub lines.
+PROFILE_KEYS = frozenset(
+    {
+        "gpus",
+        "cpus",
+        "mem",
+        "disk",
+        "jobname",
+        "scratch",
+        "runs_subdir",
+        "project",
+        "tag",
+        "conda_env",
+        "conda_base",
+        "machine",
+        "pin_submit_host",
+        "sub_lines",
+    }
+)
+
 
 def get_user() -> str:
     return os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
 
 
-def load_config(config_path: str | None = None) -> dict[str, Any]:
-    """Return merged config: built-in defaults overridden by config file."""
+def load_config(config_path: str | None = None, repo_dir: Path | None = None) -> dict[str, Any]:
+    """Return merged config: built-in defaults < personal config < repo .baircondor.yaml.
+
+    ``--config PATH`` replaces the personal config (``~/.config/baircondor/config.yaml``).
+    A committed ``.baircondor.yaml`` in the repo (cwd or any parent up to the git root)
+    layers on top of that, so a repo's launch recipe wins over personal defaults and CLI
+    flags win over both. The repo file's path is recorded under ``cfg["repo_config"]``.
+    """
     cfg = _deep_copy(DEFAULTS)
+    cfg["profiles"] = {}
+    cfg["repo_config"] = None
 
     path = Path(config_path) if config_path else _CONFIG_PATH
     if path.exists():
@@ -47,12 +81,67 @@ def load_config(config_path: str | None = None) -> dict[str, Any]:
             user_cfg = yaml.safe_load(f) or {}
         _deep_merge(cfg, user_cfg)
 
-    return cfg
+    repo_path = find_repo_config(repo_dir)
+    if repo_path:
+        with open(repo_path) as f:
+            _deep_merge(cfg, yaml.safe_load(f) or {})
+        cfg["repo_config"] = str(repo_path)
+
+    return _expand_strings(cfg)
+
+
+def find_repo_config(start: Path | None = None) -> Path | None:
+    """The nearest .baircondor.yaml between ``start`` (default cwd) and its git root.
+
+    Outside a git repo nothing is picked up, so a stray file in a parent directory
+    such as $HOME never applies by accident.
+    """
+    d = (start or Path.cwd()).resolve()
+    found = None
+    for p in (d, *d.parents):
+        candidate = p / REPO_CONFIG_NAME
+        if found is None and candidate.is_file():
+            found = candidate
+        if (p / ".git").exists():
+            return found
+    return None
+
+
+def resolve_profile(cfg: dict, name: str | None) -> dict[str, Any]:
+    """The named profile from the repo config, validated; {} when no profile was asked for."""
+    if not name:
+        return {}
+    if not cfg.get("repo_config"):
+        raise ValueError(
+            f"--profile {name} needs a {REPO_CONFIG_NAME} in this repo "
+            "(searched from the cwd up to the git root) and none was found"
+        )
+    profiles = cfg.get("profiles") or {}
+    if name not in profiles:
+        available = ", ".join(sorted(profiles)) or "(none)"
+        raise ValueError(f"profile '{name}' not in {cfg['repo_config']} (available: {available})")
+    profile = profiles[name] or {}
+    if not isinstance(profile, dict):
+        raise ValueError(f"profile '{name}' must be a mapping of submit flags, got {profile!r}")
+    unknown = sorted(set(profile) - PROFILE_KEYS)
+    if unknown:
+        raise ValueError(
+            f"profile '{name}' has unknown keys: {', '.join(unknown)} "
+            f"(allowed: {', '.join(sorted(PROFILE_KEYS))})"
+        )
+    return profile
+
+
+def fill_unset(args, values: dict[str, Any]) -> None:
+    """Set each value on args unless the caller already set it (CLI flags win)."""
+    for key, value in values.items():
+        if getattr(args, key, None) is None:
+            setattr(args, key, value)
 
 
 def resolve_resources(cfg: dict, args) -> dict[str, Any]:
     """Compute final gpus/cpus/mem from config defaults and CLI args."""
-    gpus = args.gpus
+    gpus = args.gpus if args.gpus is not None else cfg["defaults"]["gpus"]
 
     if args.cpus is not None:
         cpus = args.cpus
@@ -155,6 +244,17 @@ def _deep_copy(d: dict) -> dict:
     import copy
 
     return copy.deepcopy(d)
+
+
+def _expand_strings(obj):
+    """Expand ``${USER}``/``$USER`` and a leading ``~`` in every string of a nested config."""
+    if isinstance(obj, str):
+        return os.path.expanduser(os.path.expandvars(obj))
+    if isinstance(obj, dict):
+        return {k: _expand_strings(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_expand_strings(v) for v in obj]
+    return obj
 
 
 def _deep_merge(base: dict, override: dict) -> None:

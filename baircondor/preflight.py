@@ -14,16 +14,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from rich.console import Console
 from rich.markup import escape
 
 from .config import get_user, load_config
+from .console import PREFIX as _PREFIX
+from .console import console as _console
 from .history import HISTORY_FILE
 from .submit import _get_submit_host, _patch_args, _warn_unshared_paths
 from .templates import write_job_sub
-
-_console = Console(stderr=True)
-_PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
 
 PREFLIGHT_RESOURCES = {"gpus": 0, "cpus": 1, "mem": "512M", "disk": None}
 
@@ -100,9 +98,9 @@ def parse_report(text: str) -> dict:
 
 
 def run_preflight(args) -> None:
-    cfg = load_config(getattr(args, "config", None))
-    machine = args.machine
     repo_dir = Path.cwd()
+    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
+    machine = args.machine
     submit_host = _get_submit_host()
     scratch = args.scratch or cfg["defaults"]["scratch"]
     scratch = str(Path(scratch).expanduser())
@@ -119,6 +117,17 @@ def run_preflight(args) -> None:
     timeout = getattr(args, "timeout", 300)
     report = run_check_job(machine, scratch, runs_subdir, repo_dir, submit_host, cfg, timeout)
     _print_report(report, machine, repo_dir)
+
+    conda_env = getattr(args, "conda_env", None)
+    if conda_env and "/" in conda_env:
+        _console.print(
+            f"{_PREFIX} path-style env '{escape(conda_env)}' is activated as-is; not checked"
+        )
+    elif conda_env:
+        problems = conda_problems(report, conda_env)
+        if problems:
+            sys.exit(f"error: {machine}: " + "; ".join(problems))
+        _console.print(f"{_PREFIX} ✅ conda env '{escape(conda_env)}' exists on {escape(machine)}")
 
 
 def run_live_check(
@@ -151,12 +160,7 @@ def check_problems(report: dict, conda_env: str | None, local_commit: str | None
     problems = []
     if not report.get("repo_exists"):
         problems.append("the cwd does not exist on the target; use a shared /HOSTNAME/... path")
-    if conda_env and "/" not in conda_env:  # path-style envs are activated as-is
-        if not report.get("conda_base"):
-            problems.append("no conda installation found on the target")
-        elif conda_env not in report.get("envs", []):
-            available = ", ".join(report.get("envs", [])) or "(none)"
-            problems.append(f"conda env '{conda_env}' not found (available: {available})")
+    problems += conda_problems(report, conda_env)
     commit = report.get("git_commit")
     if commit and local_commit and commit != local_commit:
         problems.append(
@@ -164,6 +168,17 @@ def check_problems(report: dict, conda_env: str | None, local_commit: str | None
             "(the path likely points at a separate machine-local clone)"
         )
     return problems
+
+
+def conda_problems(report: dict, conda_env: str | None) -> list[str]:
+    if not conda_env or "/" in conda_env:  # path-style envs are activated as-is
+        return []
+    if not report.get("conda_base"):
+        return ["no conda installation found on the target"]
+    if conda_env not in report.get("envs", []):
+        available = ", ".join(report.get("envs", [])) or "(none)"
+        return [f"conda env '{conda_env}' not found (available: {available})"]
+    return []
 
 
 def cached_env_warning(machine: str, conda_env: str | None) -> str | None:

@@ -27,7 +27,7 @@ class CondorConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    gpus: int = 1
+    gpus: int | None = None
     cpus: int | None = None
     mem: str | None = None
     disk: str | None = None
@@ -40,6 +40,9 @@ class CondorConfig(BaseModel):
     conda_base: str | None = None
     config: str | None = None
     machine: str | None = None
+    pin_submit_host: bool | None = None
+    profile: str | None = None
+    sub_lines: list[str] | None = None
     dry_run: bool = False
 
 
