@@ -15,6 +15,7 @@ def write_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool = True,
     machine: str | None = None,
+    require_gpus: str | None = None,
     extra_lines: list[str] | None = None,
 ) -> Path:
     path = run_dir / "job.sub"
@@ -28,6 +29,7 @@ def write_job_sub(
             pin_submit_host,
             omit_gpus_when_zero,
             machine,
+            require_gpus,
             extra_lines,
         )
     )
@@ -53,6 +55,7 @@ def _render_job_sub(
     pin_submit_host: bool,
     omit_gpus_when_zero: bool,
     machine: str | None,
+    require_gpus: str | None = None,
     extra_lines: list[str] | None = None,
 ) -> str:
     lines = [
@@ -79,6 +82,8 @@ def _render_job_sub(
     gpus = resources["gpus"]
     if gpus > 0:
         lines.append(f"request_gpus = {gpus}")
+        if require_gpus:  # per-machine exclusion from condor.require_gpus in config.yaml
+            lines.append(f"require_gpus = {require_gpus}")
     elif not omit_gpus_when_zero:
         lines.append("request_gpus = 0")
 

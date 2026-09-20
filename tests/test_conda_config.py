@@ -10,6 +10,7 @@ from baircondor.config import (
     resolve_conda,
     resolve_machine,
     resolve_pin_submit_host,
+    resolve_require_gpus,
 )
 from baircondor.submit import _validate_conda
 
@@ -66,3 +67,17 @@ def test_machine_and_pin_resolution():
     assert resolve_machine(cfg, _args()) == "CFGHOST"
     assert resolve_machine(cfg, _args(machine="CLIHOST")) == "CLIHOST"
     assert resolve_machine({"condor": {"machine": None}}, _args()) is None
+
+
+def test_require_gpus_per_machine():
+    cfg = {"condor": {"require_gpus": {"redlradadm35840": 'UUID != "GPU-bad"'}}}
+    # keyed by prefix, case-insensitive, against --machine or the pinned submit host
+    assert resolve_require_gpus(cfg, "REDLRADADM35840.ad.x", True, "submit") == 'UUID != "GPU-bad"'
+    assert resolve_require_gpus(cfg, None, True, "redlradadm35840.ad.x") == 'UUID != "GPU-bad"'
+    assert resolve_require_gpus(cfg, None, True, "otherhost.ad.x") is None
+    assert (
+        resolve_require_gpus(cfg, None, False, "redlradadm35840.ad.x") is None
+    )  # no pin, no target
+    assert (
+        resolve_require_gpus({"condor": {"require_gpus": {}}}, "REDLRADADM35840", True, "s") is None
+    )

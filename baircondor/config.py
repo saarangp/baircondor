@@ -23,6 +23,7 @@ DEFAULTS: dict[str, Any] = {
         "omit_request_gpus_when_zero": True,
         "pin_submit_host": True,
         "machine": None,
+        "require_gpus": {},
     },
     "conda": {
         "conda_base": None,
@@ -192,6 +193,23 @@ def resolve_machine(cfg: dict, args) -> str | None:
     if machine is None:
         return cfg["condor"].get("machine")
     return machine
+
+
+def resolve_require_gpus(
+    cfg: dict, machine: str | None, pin_submit_host: bool, submit_host: str
+) -> str | None:
+    """Look up a per-machine `require_gpus` expression, keyed by the same host
+    string that ends up in job.sub's `requirements` line (--machine, else the
+    pinned submit host). Keys match by case-insensitive prefix, same as the
+    Machine regexp requirements use, so a short name matches an FQDN target.
+    """
+    target = machine if machine else (submit_host if pin_submit_host else None)
+    if not target:
+        return None
+    for key, expr in cfg["condor"].get("require_gpus", {}).items():
+        if target.lower().startswith(key.lower()):
+            return expr
+    return None
 
 
 def _autodetect_conda_base() -> str | None:

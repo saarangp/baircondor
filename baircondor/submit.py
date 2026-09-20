@@ -21,6 +21,7 @@ from .config import (
     resolve_machine,
     resolve_pin_submit_host,
     resolve_profile,
+    resolve_require_gpus,
     resolve_resources,
 )
 from .console import console as _console
@@ -102,6 +103,7 @@ def run_submit(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        require_gpus=resolve_require_gpus(cfg, machine, pin_submit_host, submit_host),
         extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)
@@ -171,6 +173,7 @@ def run_interactive(args) -> Path:
         pin_submit_host,
         cfg["condor"]["omit_request_gpus_when_zero"],
         machine=machine,
+        require_gpus=resolve_require_gpus(cfg, machine, pin_submit_host, submit_host),
         extra_lines=sub_lines,
     )
     _log("📝 Generated job.sub", quiet)

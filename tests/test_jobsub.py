@@ -14,7 +14,9 @@ submit_mod = importlib.import_module("baircondor.submit")
 RES = {"gpus": 1, "cpus": 6, "mem": "24G", "disk": None}
 
 
-def _sub_text(tmp_path, resources=RES, pin=True, omit_zero=True, machine=None, extra=None):
+def _sub_text(
+    tmp_path, resources=RES, pin=True, omit_zero=True, machine=None, extra=None, require=None
+):
     write_job_sub(
         tmp_path,
         tmp_path / "repo",
@@ -24,6 +26,7 @@ def _sub_text(tmp_path, resources=RES, pin=True, omit_zero=True, machine=None, e
         pin,
         omit_zero,
         machine,
+        require,
         extra,
     )
     return (tmp_path / "job.sub").read_text()
@@ -57,11 +60,14 @@ def test_requirements_line(tmp_path):
     assert 'regexp("^REDLRADADM35840"' in _sub_text(tmp_path, pin=False, machine="REDLRADADM35840")
 
 
-def test_gpus_zero_and_disk(tmp_path):
+def test_gpus_zero_disk_and_require_gpus(tmp_path):
     cpu = {"gpus": 0, "cpus": 4, "mem": "8G", "disk": None}
     assert "request_gpus" not in _sub_text(tmp_path, cpu, omit_zero=True)
     assert "request_gpus = 0" in _sub_text(tmp_path, cpu, omit_zero=False)
     assert "request_disk = 50G" in _sub_text(tmp_path, dict(RES, disk="50G"))
+    text = _sub_text(tmp_path, require='UUID != "GPU-bad"')
+    assert text.index("request_gpus = 1") < text.index('require_gpus = UUID != "GPU-bad"')
+    assert "require_gpus" not in _sub_text(tmp_path, cpu, require='UUID != "GPU-bad"')  # CPU-only
 
 
 def test_extra_lines_appended_after_batch_name(tmp_path):
