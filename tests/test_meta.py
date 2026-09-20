@@ -2,40 +2,25 @@
 
 import json
 
-import pytest
-
 from baircondor.meta import write_meta
 
 
-@pytest.fixture
-def run_dir(tmp_path):
-    return tmp_path / "run"
-
-
-@pytest.fixture
-def repo_dir(tmp_path):
-    d = tmp_path / "repo"
-    d.mkdir()
-    return d
-
-
-def _load_meta(run_dir, repo_dir, **kwargs):
-    run_dir.mkdir(parents=True, exist_ok=True)
-    defaults = dict(
-        jobname="myjob",
-        mode="batch",
-        command=["python", "train.py"],
-        resources={"gpus": 1, "cpus": 6, "mem": "24G"},
-        conda={},
+def test_meta_contents(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    resources = {"gpus": 1, "cpus": 4, "mem": "24G", "disk": None}
+    write_meta(
+        run_dir,
+        tmp_path,
+        "job",
+        "batch",
+        ["python", "t.py"],
+        resources,
+        {"env": "e"},
+        profile="eval",
     )
-    defaults.update(kwargs)
-    write_meta(run_dir, repo_dir, **defaults)
-    return json.loads((run_dir / "meta.json").read_text())
-
-
-def test_required_keys_present(run_dir, repo_dir):
-    meta = _load_meta(run_dir, repo_dir)
-    for key in (
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert {
         "user",
         "hostname",
         "timestamp",
@@ -44,36 +29,9 @@ def test_required_keys_present(run_dir, repo_dir):
         "jobname",
         "mode",
         "command",
-        "resources",
-        "conda",
         "git",
-    ):
-        assert key in meta, f"missing key: {key}"
-
-
-def test_resources_keys(run_dir, repo_dir):
-    meta = _load_meta(run_dir, repo_dir)
-    assert "gpus" in meta["resources"]
-    assert "cpus" in meta["resources"]
-    assert "mem" in meta["resources"]
-
-
-def test_git_key_present(run_dir, repo_dir):
-    meta = _load_meta(run_dir, repo_dir)
-    assert "is_repo" in meta["git"]
-
-
-def test_mode_values(run_dir, repo_dir):
-    meta_batch = _load_meta(run_dir, repo_dir, mode="batch")
-    assert meta_batch["mode"] == "batch"
-
-    (run_dir / "meta.json").unlink()
-    meta_interactive = _load_meta(
-        run_dir, repo_dir, mode="interactive", command=["/bin/bash", "-i"]
-    )
-    assert meta_interactive["mode"] == "interactive"
-
-
-def test_command_stored_as_list(run_dir, repo_dir):
-    meta = _load_meta(run_dir, repo_dir, command=["python", "train.py", "--lr", "1e-3"])
-    assert meta["command"] == ["python", "train.py", "--lr", "1e-3"]
+    } <= set(meta)
+    assert meta["mode"] == "batch" and meta["command"] == ["python", "t.py"]
+    assert meta["resources"] == {"gpus": 1, "cpus": 4, "mem": "24G"}  # None dropped
+    assert meta["conda"] == {"env": "e"} and meta["profile"] == "eval"
+    assert meta["git"]["is_repo"] is False  # tmp_path is not a git repo

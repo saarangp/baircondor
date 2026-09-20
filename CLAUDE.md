@@ -26,7 +26,8 @@ baircondor/
   tui.py        textual browser behind `history` (TTY only)
   setup.py      first-run wizard
   skill.py      installs skills/baircondor/SKILL.md for Claude Code and Codex
-  api.py        CondorConfig (pydantic), submit(), interactive(), from_profile()
+  api.py        CondorConfig (pydantic), submit(), interactive()
+  console.py    shared stderr console and log()
 tests/          one file per module; parsers are tested on canned command output
 ```
 

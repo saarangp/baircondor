@@ -217,7 +217,7 @@ baircondor submit --profile eval --mem 96G -- ...     # explicit flags still win
 Precedence: CLI flags > `.baircondor.yaml` > personal config (`~/.config/baircondor/config.yaml`,
 or `--config PATH`) > built-in defaults. `${USER}` and `~` expand in the repo file. The
 profile name is recorded in `meta.json` and logged at submit time. From Python:
-`CondorConfig.from_profile("eval", mem="96G")`.
+`submit(cmd, profile="eval", mem="96G")`.
 
 </details>
 
@@ -261,9 +261,9 @@ held (it prints `HoldReason` and leaves the job alone), 4 if removed, 2 if the c
 unknown, 5 on `--timeout`. It does not treat one empty `condor_q` answer as an exit; the
 schedd blips, so it waits for a `condor_history` record.
 
-`--after CLUSTER` waits the same way on the submit host and then submits; if the earlier
-job did not finish with exit 0, nothing is submitted. It blocks the shell, so run long
-chains under `nohup`.
+`--after CLUSTER` generates the run dir, then waits the same way on the submit host and
+submits; if the earlier job did not finish with exit 0, nothing is submitted. It blocks
+the shell, so run long chains under `nohup`.
 
 **Extra submit lines.** `--sub-line 'key = value'` (repeatable) appends verbatim lines
 to `job.sub`, for example to steer clear of a faulty GPU:
@@ -333,8 +333,8 @@ All flags work for both `submit` and `interactive`:
 | `--dry-run` | `false` | Generate files only; don't submit (the only no-submit option) |
 | `--config PATH` | `~/.config/baircondor/config.yaml` | Personal config file override |
 
-`submit` only: `--check` (preflight the target, then submit if it passes), `--after CLUSTER`
-(wait for that job to succeed, then submit), `--after-interval SECS`.
+`submit` only: `--check` (preflight the target, then submit if it passes) and `--after CLUSTER`
+(wait for that job to succeed, then submit).
 
 </details>
 
@@ -391,8 +391,8 @@ run_dir = submit(["python", "train.py"], condor=config.condor)
 ```
 
 See `examples/python_api_patterns.py` for sweep and self-submit patterns.
-`CondorConfig.from_profile("eval", mem="96G")` builds a config from the repo's
-`.baircondor.yaml`; keyword overrides win like CLI flags.
+`CondorConfig(profile="eval")` or `submit(cmd, profile="eval")` uses the repo's
+`.baircondor.yaml`; explicit fields win like CLI flags.
 
 </details>
 

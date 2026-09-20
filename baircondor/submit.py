@@ -11,29 +11,23 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from rich.console import Console
 from rich.markup import escape
 
 from .config import (
-    apply_profile,
+    fill_unset,
     get_user,
     load_config,
     resolve_conda,
     resolve_machine,
     resolve_pin_submit_host,
+    resolve_profile,
     resolve_resources,
 )
+from .console import console as _console
+from .console import log as _log
 from .history import append_entry
 from .meta import write_meta
 from .templates import write_job_sub, write_run_sh
-
-_console = Console(stderr=True, soft_wrap=True)
-_PREFIX = f"[dim]{escape('[baircondor]')}[/dim]"
-
-
-def _log(msg: str, quiet: bool) -> None:
-    if not quiet:
-        _console.print(f"{_PREFIX} {msg}")
 
 
 def _get_submit_host() -> str:
@@ -42,17 +36,15 @@ def _get_submit_host() -> str:
 
 
 def run_submit(args) -> Path:
-    repo_dir = Path.cwd()
-    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
-    quiet = getattr(args, "quiet", False)
-    profile = getattr(args, "profile", None)
-    if apply_profile(cfg, args, profile):
-        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
-    resources = resolve_resources(cfg, args)
-    conda = resolve_conda(cfg, args)
-    pin_submit_host = resolve_pin_submit_host(cfg, args)
-    machine = resolve_machine(cfg, args)
-    sub_lines = list(getattr(args, "sub_lines", None) or [])
+    r = _resolve(args)
+    cfg, resources, conda, pin_submit_host, machine = (
+        r["cfg"],
+        r["resources"],
+        r["conda"],
+        r["pin"],
+        r["machine"],
+    )
+    sub_lines, profile, quiet, repo_dir = r["sub_lines"], r["profile"], r["quiet"], r["repo_dir"]
 
     # strip leading "--" separator that argparse REMAINDER captures
     command = args.command
@@ -60,15 +52,6 @@ def run_submit(args) -> Path:
         command = command[1:]
     if not command:
         sys.exit("error: a command is required after --")
-
-    after = getattr(args, "after", None)
-    if after and not args.dry_run:
-        from .wait import wait_for_cluster
-
-        _log(f"⏳ --after {after}: waiting for that job to finish before submitting", quiet)
-        code = wait_for_cluster(after, interval=getattr(args, "after_interval", 60))
-        if code != 0:
-            sys.exit(f"error: --after {after}: that job did not finish cleanly; not submitting")
 
     submit_host = _get_submit_host()
     user = get_user()
@@ -139,23 +122,22 @@ def run_submit(args) -> Path:
         gpus=resources["gpus"],
         command=command,
         user=user,
+        after=getattr(args, "after", None),
     )
 
     return run_dir
 
 
 def run_interactive(args) -> Path:
-    repo_dir = Path.cwd()
-    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
-    quiet = getattr(args, "quiet", False)
-    profile = getattr(args, "profile", None)
-    if apply_profile(cfg, args, profile):
-        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
-    resources = resolve_resources(cfg, args)
-    conda = resolve_conda(cfg, args)
-    pin_submit_host = resolve_pin_submit_host(cfg, args)
-    machine = resolve_machine(cfg, args)
-    sub_lines = list(getattr(args, "sub_lines", None) or [])
+    r = _resolve(args)
+    cfg, resources, conda, pin_submit_host, machine = (
+        r["cfg"],
+        r["resources"],
+        r["conda"],
+        r["pin"],
+        r["machine"],
+    )
+    sub_lines, profile, quiet, repo_dir = r["sub_lines"], r["profile"], r["quiet"], r["repo_dir"]
 
     submit_host = _get_submit_host()
     user = get_user()
@@ -214,6 +196,30 @@ def run_interactive(args) -> Path:
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _resolve(args) -> dict:
+    """Config, profile, and resource resolution shared by submit and interactive."""
+    repo_dir = Path.cwd()
+    cfg = load_config(getattr(args, "config", None), repo_dir=repo_dir)
+    quiet = getattr(args, "quiet", False)
+    profile = getattr(args, "profile", None)
+    values = resolve_profile(cfg, profile)
+    if profile:
+        _log(f"🧾 Profile '{profile}' from {cfg['repo_config']}", quiet)
+    fill_unset(args, {k: v for k, v in values.items() if k != "sub_lines"})
+    sub_lines = list(values.get("sub_lines") or []) + list(getattr(args, "sub_lines", None) or [])
+    return {
+        "cfg": cfg,
+        "resources": resolve_resources(cfg, args),
+        "conda": resolve_conda(cfg, args),
+        "pin": resolve_pin_submit_host(cfg, args),
+        "machine": resolve_machine(cfg, args),
+        "sub_lines": sub_lines,
+        "profile": profile,
+        "quiet": quiet,
+        "repo_dir": repo_dir,
+    }
 
 
 def _make_run_dir(
@@ -319,6 +325,7 @@ def _submit(
     gpus: int = 0,
     command: list[str] | None = None,
     user: str = "",
+    after: str | None = None,
 ) -> None:
     cmd = ["condor_submit", str(job_sub)]
     _log(f"🗂️  Repo dir : {repo_dir}", quiet)
@@ -331,6 +338,13 @@ def _submit(
     if dry_run:
         _log(f"🧪 [dry-run] would run: {' '.join(cmd)}", quiet)
         return
+
+    if after:
+        from .wait import wait_for_cluster
+
+        _log(f"⏳ --after {after}: waiting for that job to finish before submitting", quiet)
+        if wait_for_cluster(after) != 0:
+            sys.exit(f"error: --after {after}: that job did not finish cleanly; not submitting")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.stdout:

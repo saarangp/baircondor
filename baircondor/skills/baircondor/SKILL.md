@@ -6,7 +6,7 @@ description: Launch, watch, and debug GPU jobs on the lab's HTCondor servers wit
 # baircondor
 
 `baircondor` is the only way to submit condor jobs here. Never write a `job.sub` or call
-`condor_submit` yourself. Read the repo's `AGENTS.md` once per session.
+`condor_submit` yourself.
 
 ## Before any GPU run
 

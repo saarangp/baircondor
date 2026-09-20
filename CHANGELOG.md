@@ -13,8 +13,8 @@
 - A committed `.baircondor.yaml` (cwd up to the git root) layers over the personal
   config and defines named `profiles`. `baircondor submit --profile NAME` fills unset
   flags from it; explicit flags still win. `baircondor profiles` lists them. `${USER}`
-  and `~` expand. The profile is recorded in `meta.json`.
-  `CondorConfig.from_profile()` for the Python API.
+  and `~` expand. The profile is recorded in `meta.json`. The Python API takes
+  `profile="NAME"` the same way.
 
 ### GPU cap audit
 - `baircondor gpus [--machine NAME] [--need N] [--json]`: per-GPU owner and source

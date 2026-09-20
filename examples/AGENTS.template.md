@@ -55,5 +55,3 @@ baircondor submit --profile eval --after <CLUSTER> -- bash benchmarking/phase_<x
 
 1. Get the user's go-ahead for anything that spends GPU time.
 2. `baircondor gpus` on the target; 3 GPUs per server per user, condor plus direct.
-3. Record every run in `<reports/runs.md or equivalent>` when it finishes, including runs
-   that measured nothing.

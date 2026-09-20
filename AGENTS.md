@@ -1,9 +1,8 @@
 # Working with baircondor as an agent
 
-Guidance for Claude Code, Codex, and similar tools running experiments on the lab's
-HTCondor GPU servers. `README.md` is the reference; this file is the rules. Load the
-bundled skill too (`baircondor install-skill`, then `/baircondor`), it carries the same
-rules in short form.
+Rules for Claude Code, Codex, and similar tools running experiments on the lab's HTCondor
+GPU servers. `README.md` documents the commands; this file says how to use them safely.
+`baircondor install-skill` installs the same rules as a skill for both tools.
 
 ## The one submit path
 
@@ -32,13 +31,11 @@ not generate, pass it with `--sub-line 'key = value'`.
 - Condor may manage only some of a host's GPUs. On REDLRADADM23589, condor manages 4 of
   the 8 (indices 4 to 7); the others are direct-only. `baircondor gpus` shows the split.
 
-## Compute costs approval
+## Ask before spending compute
 
-Any run that spends GPU time is the user's call. Ask before launching unless they already
-said to launch. Questions about the cluster (which machine holds the data, which conda
-env a job type needs, what a policy does) are questions for the user, not experiments.
-A night of GPU jobs was once burned probing launch behavior the user could have explained
-in one line.
+A run that uses GPU time needs the user's go-ahead unless they already gave it. Questions
+about the cluster (which machine holds the data, which conda env a job needs, what a
+policy does) are for the user, not for experiments.
 
 ## The GPU budget: 3 per user per server
 
@@ -50,10 +47,9 @@ baircondor gpus --need N              # this host
 baircondor gpus --machine NAME        # an exec node
 ```
 
-It joins `nvidia-smi` (with process owners) and condor's slot claims on GPU UUID, adds
-your idle jobs still in the queue, and exits 1 with `DO NOT LAUNCH` if taking N more would
-exceed the cap. Your own direct runs count; an agent once put the user at 5 GPUs by
-counting only "other people's" processes.
+It joins `nvidia-smi` (with process owners) and condor's slot claims, adds your idle jobs
+that can land on that machine, and exits 1 with `DO NOT LAUNCH` if taking N more would
+exceed the cap. Your own direct runs count too.
 
 ## Two ways to run
 
@@ -82,7 +78,7 @@ counting only "other people's" processes.
 
 - `--dry-run` generates the run dir and files and never submits. It is the only such flag.
 - `--check` runs a preflight job on the target and then submits if the checks pass. It is
-  a gate, not a dry run; it once launched a real 2-GPU training run that way.
+  a gate, not a dry run.
 - `baircondor preflight --machine NAME --conda-env ENV` inspects a machine with a tiny
   CPU-only job and exits non-zero if the env is missing there. Use it to validate.
 
@@ -120,7 +116,6 @@ sleep 600   # let it register before the next check
 
 ## Putting this in your own repo
 
-Copy `examples/AGENTS.template.md` into your experiment repo's `AGENTS.md` (Codex) or
-`CLAUDE.md` (Claude Code; one can `@`-import the other) and fill the placeholders. Commit
-a `.baircondor.yaml` with one profile per job type so agents launch from the file, not
-from memory.
+Copy `examples/AGENTS.template.md` into your experiment repo's `AGENTS.md` or `CLAUDE.md`
+and fill the placeholders. Commit a `.baircondor.yaml` with one profile per job type so
+launches come from the file, not from memory.

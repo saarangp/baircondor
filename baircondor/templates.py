@@ -86,8 +86,6 @@ def _render_job_sub(
         lines.append(f"request_disk = {resources['disk']}")
 
     lines.append(f'+JobBatchName = "{jobname}"')
-    # --sub-line / profile sub_lines: verbatim submit-description lines, e.g.
-    # require_gpus = DeviceUuid != "..." to steer clear of a faulty GPU.
     for line in extra_lines or []:
         lines.append(validate_sub_line(line))
     lines.append("")  # trailing newline

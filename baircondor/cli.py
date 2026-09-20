@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import yaml
 from rich.console import Console
 
 from .config import CONFIG_PATH, get_user
@@ -183,8 +184,6 @@ def _cmd_last(args) -> None:
 
 
 def _cmd_profiles(args) -> None:
-    import yaml
-
     from .config import REPO_CONFIG_NAME, load_config
 
     cfg = load_config(getattr(args, "config", None))
@@ -349,13 +348,6 @@ def _add_submit_parser(sub) -> None:
         help="Wait (on this host) until condor cluster CLUSTER finishes with exit 0, then "
         "submit. If it is held, removed, or fails, nothing is submitted. Blocks the shell; "
         "run under nohup for long chains.",
-    )
-    p.add_argument(
-        "--after-interval",
-        type=int,
-        default=60,
-        metavar="SECS",
-        help="Poll interval for --after (default: 60).",
     )
     p.add_argument(
         "command",

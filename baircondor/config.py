@@ -11,6 +11,7 @@ import yaml
 
 DEFAULTS: dict[str, Any] = {
     "defaults": {
+        "gpus": 1,
         "scratch": "~/condor-scratch",
         "runs_subdir": "condor-runs",
         "cpus_per_gpu": 4,  # effectively like num workers per GPU, but also used to compute CPU-only defaults
@@ -82,31 +83,31 @@ def load_config(config_path: str | None = None, repo_dir: Path | None = None) ->
     repo_path = find_repo_config(repo_dir)
     if repo_path:
         with open(repo_path) as f:
-            repo_cfg = yaml.safe_load(f) or {}
-        _deep_merge(cfg, _expand_strings(repo_cfg))
+            _deep_merge(cfg, yaml.safe_load(f) or {})
         cfg["repo_config"] = str(repo_path)
 
-    return cfg
+    return _expand_strings(cfg)
 
 
 def find_repo_config(start: Path | None = None) -> Path | None:
-    """Find .baircondor.yaml in ``start`` (default cwd) or a parent, stopping at the git root."""
+    """The nearest .baircondor.yaml between ``start`` (default cwd) and its git root.
+
+    Outside a git repo nothing is picked up, so a stray file in a parent directory
+    such as $HOME never applies by accident.
+    """
     d = (start or Path.cwd()).resolve()
+    found = None
     for p in (d, *d.parents):
         candidate = p / REPO_CONFIG_NAME
-        if candidate.is_file():
-            return candidate
+        if found is None and candidate.is_file():
+            found = candidate
         if (p / ".git").exists():
-            return None
+            return found
     return None
 
 
-def apply_profile(cfg: dict, args, name: str | None) -> dict[str, Any]:
-    """Fill unset submit args from the named profile in the repo config.
-
-    CLI flags (anything already set on ``args``) win. Returns the profile dict, or {}
-    when no profile was requested.
-    """
+def resolve_profile(cfg: dict, name: str | None) -> dict[str, Any]:
+    """The named profile from the repo config, validated; {} when no profile was asked for."""
     if not name:
         return {}
     if not cfg.get("repo_config"):
@@ -119,24 +120,27 @@ def apply_profile(cfg: dict, args, name: str | None) -> dict[str, Any]:
         available = ", ".join(sorted(profiles)) or "(none)"
         raise ValueError(f"profile '{name}' not in {cfg['repo_config']} (available: {available})")
     profile = profiles[name] or {}
+    if not isinstance(profile, dict):
+        raise ValueError(f"profile '{name}' must be a mapping of submit flags, got {profile!r}")
     unknown = sorted(set(profile) - PROFILE_KEYS)
     if unknown:
         raise ValueError(
             f"profile '{name}' has unknown keys: {', '.join(unknown)} "
             f"(allowed: {', '.join(sorted(PROFILE_KEYS))})"
         )
-    for key, value in profile.items():
-        if key == "sub_lines":
-            existing = list(getattr(args, "sub_lines", None) or [])
-            setattr(args, "sub_lines", list(value or []) + existing)
-        elif getattr(args, key, None) is None:
-            setattr(args, key, value)
     return profile
+
+
+def fill_unset(args, values: dict[str, Any]) -> None:
+    """Set each value on args unless the caller already set it (CLI flags win)."""
+    for key, value in values.items():
+        if getattr(args, key, None) is None:
+            setattr(args, key, value)
 
 
 def resolve_resources(cfg: dict, args) -> dict[str, Any]:
     """Compute final gpus/cpus/mem from config defaults and CLI args."""
-    gpus = args.gpus if args.gpus is not None else 1
+    gpus = args.gpus if args.gpus is not None else cfg["defaults"]["gpus"]
 
     if args.cpus is not None:
         cpus = args.cpus
